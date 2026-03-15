@@ -1,0 +1,6 @@
+{
+    "dbPath": "",
+    "theme": "dark",
+    "autoBackup": false,
+    "backupInterval": "daily"
+}

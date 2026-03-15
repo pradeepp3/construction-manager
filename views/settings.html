@@ -1,0 +1,86 @@
+// Settings View - Placeholder for future enhancements
+
+async function loadSettingsView() {
+const configResult = await window.api.settings.getConfig();
+const config = configResult.success ? configResult.data : { dbPath: '', theme: 'dark' };
+
+return `
+<div class="settings-container">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">⚙️ Settings</h2>
+        </div>
+        <div class="card-body">
+            <h3 style="margin-bottom: 1rem;">Database Configuration</h3>
+            <div class="form-group">
+                <label class="form-label">Database Storage Path</label>
+                <div class="flex gap">
+                    <input type="text" id="dbPath" class="form-input"
+                        value="${escapeHtml(config.dbPath || 'Default (Project Directory)')}" readonly />
+                    <button class="btn btn-secondary" onclick="selectDbPath()">
+                        Browse
+                    </button>
+                </div>
+                <p style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.85rem;">
+                    Choose where to store the database files. You can use an external drive for data portability.
+                </p>
+            </div>
+
+            <h3 style="margin: 2rem 0 1rem;">Application Information</h3>
+            <div style="padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                <p><strong>Application:</strong> Construction Operations Manager</p>
+                <p><strong>Version:</strong> 1.0.0</p>
+                <p><strong>Database:</strong> MongoDB (Offline)</p>
+                <p><strong>Current User:</strong> ${AppState.currentUser ? AppState.currentUser.username : 'Unknown'}
+                </p>
+            </div>
+
+            <h3 style="margin: 2rem 0 1rem;">About</h3>
+            <p style="color: var(--text-secondary);">
+                This is an Integrated Construction Operations Management System built with Electron.js.
+                It helps you manage labour, materials, equipment, and finances for construction projects.
+            </p>
+
+            <div style="margin-top: 2rem;">
+                <button class="btn btn-danger" onclick="clearAllData()">
+                    🗑️ Clear All Data (Dangerous!)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+`;
+}
+
+function initializeSettings() {
+// Event handlers are inline
+}
+
+async function selectDbPath() {
+const result = await window.api.settings.selectDbPath();
+if (result.success) {
+document.getElementById('dbPath').value = result.path;
+await window.api.settings.updateConfig({ dbPath: result.path });
+showAlert('Database path updated. Please restart the application for changes to take effect.', 'info');
+}
+}
+
+async function clearAllData() {
+if (!confirm('⚠️ WARNING: This will delete ALL data including projects, workers, materials, equipment, and expenses.
+This action CANNOT be undone!\n\nAre you absolutely sure?')) {
+return;
+}
+
+if (!confirm('This is your last chance. Are you REALLY sure you want to delete everything?')) {
+return;
+}
+
+showAlert('This feature is not implemented yet for safety reasons. Please manually delete the data folder if needed.',
+'warning');
+}
+
+// Expose functions globally
+window.loadSettingsView = loadSettingsView;
+window.initializeSettings = initializeSettings;
+window.selectDbPath = selectDbPath;
+window.clearAllData = clearAllData;

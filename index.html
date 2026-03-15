@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kumaran Infratech - Construction Operations Platform</title>
+    <meta name="description" content="Enterprise-grade construction resource management for multinational projects.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div id="app">
+
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="sidebar" style="display:none;">
+            <div class="sidebar-brand">
+                <img src="assets/icons/icon.png" alt="Kumaran Infratech logo" class="brand-logo" />
+                <div>
+                    <div class="brand-name">Kumaran Infratech</div>
+                    <div class="brand-tagline">Ops Platform v2.0</div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+
+                <!-- Dashboard -->
+                <button class="nav-item" onclick="navigateTo('dashboard')" data-view="dashboard" title="Dashboard">
+                    <i class="ph ph-squares-four"></i>
+                    <span class="nav-label">Dashboard</span>
+                </button>
+
+                <div class="nav-divider"></div>
+                <div class="section-label" style="padding: 0 .5rem;">Management</div>
+
+                <!-- Projects -->
+                <button class="nav-item" onclick="navigateTo('projects')" data-view="projects" title="Projects">
+                    <i class="ph ph-briefcase"></i>
+                    <span class="nav-label">Projects</span>
+                </button>
+
+                <!-- Labour - Tree Toggle -->
+                <div class="nav-tree-item" id="labour-tree">
+                    <button class="nav-tree-toggle" id="labour-tree-toggle" onclick="toggleLabourTree()" title="Labour">
+                        <i class="ph ph-hard-hat"></i>
+                        <span class="nav-label">Labour</span>
+                        <i class="ph ph-caret-right nav-tree-chevron"></i>
+                    </button>
+
+                    <!-- Labour sub-items -->
+                    <div class="nav-tree-children" id="labour-tree-children">
+                        <button class="nav-tree-child" data-labour-sub="masonry"
+                            onclick="navigateLabourSub('masonry')" title="Masonry">
+                            <i class="ph ph-wall"></i>
+                            <span>Masonry</span>
+                        </button>
+                        <button class="nav-tree-child" data-labour-sub="centring"
+                            onclick="navigateLabourSub('centring')" title="Centring">
+                            <i class="ph ph-columns"></i>
+                            <span>Centring</span>
+                        </button>
+                        <button class="nav-tree-child" data-labour-sub="concrete"
+                            onclick="navigateLabourSub('concrete')" title="Concrete Team">
+                            <i class="ph ph-cylinder"></i>
+                            <span>Concrete Team</span>
+                        </button>
+                        <button class="nav-tree-child" data-labour-sub="ep"
+                            onclick="navigateLabourSub('ep')" title="Electrical & Plumbing">
+                            <i class="ph ph-lightning"></i>
+                            <span>Elec & Plumbing</span>
+                        </button>
+                        <button class="nav-tree-child" data-labour-sub="tiles"
+                            onclick="navigateLabourSub('tiles')" title="Tiles">
+                            <i class="ph ph-grid-four"></i>
+                            <span>Tiles</span>
+                        </button>
+                        <button class="nav-tree-child" data-labour-sub="painting"
+                            onclick="navigateLabourSub('painting')" title="Painting">
+                            <i class="ph ph-paint-brush"></i>
+                            <span>Painting</span>
+                        </button>
+                        <button class="nav-tree-child" data-labour-sub="report"
+                            onclick="navigateLabourSub('report')" title="Weekly Report">
+                            <i class="ph ph-chart-bar"></i>
+                            <span>Weekly Report</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Materials -->
+                <button class="nav-item" onclick="navigateTo('materials')" data-view="materials" title="Materials">
+                    <i class="ph ph-package"></i>
+                    <span class="nav-label">Materials</span>
+                </button>
+
+                <!-- Equipment -->
+                <button class="nav-item" onclick="navigateTo('equipment')" data-view="equipment" title="Equipment">
+                    <i class="ph ph-truck"></i>
+                    <span class="nav-label">Equipment</span>
+                </button>
+
+                <!-- Other Expenses -->
+                <button class="nav-item" onclick="navigateTo('other-expenses')" data-view="other-expenses" title="Other Expenses">
+                    <i class="ph ph-receipt"></i>
+                    <span class="nav-label">Other Expenses</span>
+                </button>
+
+                <div class="nav-divider"></div>
+                <div class="section-label" style="padding: 0 .5rem;">Finance</div>
+
+                <button class="nav-item" onclick="navigateTo('finance')" data-view="finance" title="Finance">
+                    <i class="ph ph-chart-pie-slice"></i>
+                    <span class="nav-label">Finance</span>
+                </button>
+
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="nav-item" onclick="navigateTo('settings')" data-view="settings" title="Settings">
+                    <i class="ph ph-gear"></i>
+                </button>
+                <button class="nav-item" id="themeBtn" onclick="toggleTheme()" title="Toggle Theme">
+                    <i class="ph ph-sun"></i>
+                </button>
+                <button class="nav-item logout-btn" id="logoutBtn" title="Logout">
+                    <i class="ph ph-sign-out"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content">
+            <!-- Top Header -->
+            <header class="top-header" id="top-header" style="display:none;">
+                <div class="header-left">
+                    <div class="header-project-info">
+                        <h2 id="headerProjectName">Dashboard</h2>
+                        <div class="project-status-badge">Active Project</div>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <div class="search-bar">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" placeholder="Search anything... (Ctrl+K)" id="globalSearch">
+                    </div>
+                    <div class="header-icon-btn" title="Notifications" id="notifBtn">
+                        <i class="ph ph-bell"></i>
+                        <span class="notif-badge" id="notifBadge" style="display:none;">3</span>
+                    </div>
+                    <div class="user-chip" id="userChip">
+                        <div class="user-chip-avatar" id="userAvatarChip">A</div>
+                        <span class="user-chip-name" id="userNameChip">Admin</span>
+                    </div>
+                </div>
+            </header>
+
+            <div id="view-container"></div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display:none;">
+        <div class="loading-logo">K</div>
+        <div class="loading-bar">
+            <div class="loading-bar-fill"></div>
+        </div>
+        <div class="loading-text">Initializing Platform...</div>
+    </div>
+
+    <!-- Scripts - order matters -->
+    <script src="js/ai-insights.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/project-manager.js"></script>
+    <script src="js/modules/labour.js"></script>
+    <script src="js/modules/labour-calculator.js"></script>
+    <script src="js/modules/materials.js"></script>
+    <script src="js/modules/equipment.js"></script>
+    <script src="js/modules/other-expenses.js"></script>
+    <script src="js/modules/finance.js"></script>
+    <script src="js/modules/settings.js"></script>
+
+    <script>
+        // -- Labour tree toggle -----------------------------------
+        function toggleLabourTree() {
+            const toggle   = document.getElementById('labour-tree-toggle');
+            const children = document.getElementById('labour-tree-children');
+            if (!toggle || !children) return;
+            const isOpen = children.classList.contains('open');
+            children.classList.toggle('open', !isOpen);
+            toggle.classList.toggle('open', !isOpen);
+        }
+
+        // Navigate to a labour sub-module
+        function navigateLabourSub(sub) {
+            if (!window.AppState || !window.AppState.currentProject) {
+                if (window.showToast) showToast('Select a project first', 'warning');
+                return;
+            }
+
+            // Open the tree if not already open
+            const children = document.getElementById('labour-tree-children');
+            const toggle   = document.getElementById('labour-tree-toggle');
+            if (children && !children.classList.contains('open')) {
+                children.classList.add('open');
+                toggle && toggle.classList.add('open');
+            }
+
+            // Highlight the active child
+            document.querySelectorAll('.nav-tree-child').forEach(b => b.classList.remove('active'));
+            const activeBtn = document.querySelector(`.nav-tree-child[data-labour-sub="${sub}"]`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            // Mark Labour parent toggle as active too
+            if (toggle) toggle.classList.add('active');
+
+            // Deactivate other nav items
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+
+            // Update header
+            const subLabels = {
+                masonry:  'Labour - Masonry',
+                centring: 'Labour - Centring',
+                concrete: 'Labour - Concrete',
+                ep:       'Labour - Electrical & Plumbing',
+                tiles:    'Labour - Tiles',
+                painting: 'Labour - Painting',
+                report:   'Labour - Weekly Report',
+            };
+            const headerEl = document.getElementById('headerProjectName');
+            if (headerEl && window.AppState.currentProject) {
+                headerEl.textContent = window.AppState.currentProject.name;
+            }
+
+            // Set the sub and navigate
+            window._labourSub = sub;
+            if (window.navigateTo) navigateTo('labour');
+        }
+
+        // Keep tree open and child highlighted when on labour view
+        const _origNavigateTo = window.navigateTo;
+        document.addEventListener('DOMContentLoaded', () => {
+            // Patch navigateTo to handle labour tree state
+            const orig = window.navigateTo;
+            if (!orig) return;
+            window.navigateTo = async function(view) {
+                // When navigating away from labour, clear tree active states
+                if (view !== 'labour') {
+                    document.querySelectorAll('.nav-tree-child').forEach(b => b.classList.remove('active'));
+                    const t = document.getElementById('labour-tree-toggle');
+                    if (t) t.classList.remove('active');
+                }
+                return orig(view);
+            };
+        });
+    </script>
+</body>
+
+</html>
