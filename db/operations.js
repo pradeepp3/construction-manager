@@ -444,23 +444,46 @@ async function deleteExpense(expenseId) {
 async function getFinancialSummary(projectId) {
     const db = getDatabase();
 
-    // Get all workers for labour costs
-    const workers = await getAllWorkers(projectId);
-    const labourCost = workers.reduce((sum, w) => {
-        const cost = w.totalCost || ((w.dailyWage || 0) * (w.daysWorked || 0));
+    // ── Legacy workers collection (old labour module) ──────────
+    const workers    = await db.collection('workers').find({ projectId }).toArray();
+    const legacyLabour = workers.reduce((sum, w) => {
+        const cost = w.wageType === 'sqft'
+            ? toNumber(w.sqftRate) * toNumber(w.sqftArea)
+            : toNumber(w.dailyWage) * toNumber(w.daysWorked);
         return sum + (parseFloat(cost) || 0);
     }, 0);
 
-    // Get all materials
-    const materials = await getAllMaterials(projectId);
+    // ── New labour module collections ──────────────────────────
+    const [masonryEntries, centringEntries, concreteEntries,
+           epEntries, tilesEntries, paintingEntries] = await Promise.all([
+        db.collection('masonry_entries').find({ projectId }).toArray(),
+        db.collection('centring_entries').find({ projectId }).toArray(),
+        db.collection('concrete_entries').find({ projectId }).toArray(),
+        db.collection('ep_entries').find({ projectId }).toArray(),
+        db.collection('tiles_entries').find({ projectId }).toArray(),
+        db.collection('painting_entries').find({ projectId }).toArray(),
+    ]);
+
+    const masonryCost  = masonryEntries.reduce((s, e)  => s + toNumber(e.wageAmount), 0);
+    const centringCost = centringEntries.reduce((s, e) => s + toNumber(e.wageAmount), 0);
+    const concreteCost = concreteEntries.reduce((s, e) => s + toNumber(e.amount), 0);
+    const epCost       = epEntries.reduce((s, e)       => s + toNumber(e.amount), 0);
+    const tilesCost    = tilesEntries.reduce((s, e)    => s + toNumber(e.wageAmount), 0);
+    const paintingCost = paintingEntries.reduce((s, e) => s + toNumber(e.wageAmount), 0);
+
+    const newLabourCost = masonryCost + centringCost + concreteCost + epCost + tilesCost + paintingCost;
+    const labourCost    = legacyLabour + newLabourCost;
+
+    // ── Materials ──────────────────────────────────────────────
+    const materials    = await db.collection('materials').find({ projectId }).toArray();
     const materialCost = materials.reduce((sum, m) => sum + (parseFloat(m.totalCost) || 0), 0);
 
-    // Get all equipment
-    const equipment = await getAllEquipment(projectId);
+    // ── Equipment ──────────────────────────────────────────────
+    const equipment    = await db.collection('equipment').find({ projectId }).toArray();
     const equipmentCost = equipment.reduce((sum, e) => sum + (parseFloat(e.totalCost) || 0), 0);
 
-    // Get other expenses
-    const expenses = await getAllExpenses(projectId);
+    // ── Other expenses ─────────────────────────────────────────
+    const expenses     = await db.collection('expenses').find({ projectId }).toArray();
     const otherExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
     return {
@@ -468,7 +491,9 @@ async function getFinancialSummary(projectId) {
         materialCost,
         equipmentCost,
         otherExpenses,
-        totalCost: labourCost + materialCost + equipmentCost + otherExpenses
+        totalCost: labourCost + materialCost + equipmentCost + otherExpenses,
+        // Breakdown for debugging
+        _labourBreakdown: { legacyLabour, masonryCost, centringCost, concreteCost, epCost, tilesCost, paintingCost }
     };
 }
 

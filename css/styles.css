@@ -3043,7 +3043,201 @@ tbody tr:hover td {
 .flex.gap-sm { gap: .5rem; }
 .gap-sm { gap: .5rem; }
 
-/* ── Light theme overrides ───────────────────────────────────── */
+/* ── Clickable team card ─────────────────────────────────────── */
+.team-card-clickable {
+    cursor: pointer;
+    transition: border-color .18s, box-shadow .18s, transform .15s;
+}
+
+.team-card-clickable:hover {
+    border-color: rgba(245,158,11,.45);
+    box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    transform: translateY(-2px);
+}
+
+/* ── Team member pills ───────────────────────────────────────── */
+.team-card-members {
+    padding: .6rem .75rem;
+    background: rgba(255,255,255,.025);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.05);
+}
+
+.team-members-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-muted, #9999b3);
+    margin-bottom: .5rem;
+}
+
+.team-members-count {
+    margin-left: auto;
+    background: rgba(245,158,11,.15);
+    color: var(--brand, #F59E0B);
+    font-size: .62rem;
+    font-weight: 800;
+    padding: .1rem .4rem;
+    border-radius: 10px;
+}
+
+.team-member-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+.team-member-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .55rem;
+    border-radius: 20px;
+    font-size: .72rem;
+    font-weight: 600;
+    background: rgba(245,158,11,.1);
+    color: var(--brand, #F59E0B);
+    border: 1px solid rgba(245,158,11,.2);
+    white-space: nowrap;
+}
+
+.team-no-members {
+    font-size: .75rem;
+    color: var(--text-muted, #9999b3);
+    margin: 0;
+    font-style: italic;
+}
+
+/* ── Team card footer hint ───────────────────────────────────── */
+.team-card-footer {
+    padding-top: .5rem;
+    border-top: 1px solid rgba(255,255,255,.05);
+    margin-top: .25rem;
+}
+
+.team-card-hint {
+    font-size: .7rem;
+    color: var(--text-muted, #9999b3);
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+}
+
+.team-card-hint i {
+    color: var(--brand, #F59E0B);
+    font-size: .8rem;
+}
+
+/* ── Team Detail Page ────────────────────────────────────────── */
+.detail-page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.detail-page-title {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Stats strip ─────────────────────────────────────────────── */
+.detail-stats-strip {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.1rem;
+    padding: .85rem 1rem;
+    background: var(--bg-card, #16162a);
+    border: 1px solid var(--border, rgba(255,255,255,.07));
+    border-radius: var(--r-lg, 12px);
+}
+
+.detail-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+    flex: 1;
+    gap: .2rem;
+    padding: .3rem .5rem;
+    border-right: 1px solid rgba(255,255,255,.06);
+}
+
+.detail-stat:last-child {
+    border-right: none;
+}
+
+/* ── Detail members section ──────────────────────────────────── */
+.detail-members-section {
+    margin-bottom: 1.1rem;
+    padding: .85rem 1rem;
+    background: var(--bg-card, #16162a);
+    border: 1px solid var(--border, rgba(255,255,255,.07));
+    border-radius: var(--r-lg, 12px);
+}
+
+/* ── Detail table section ────────────────────────────────────── */
+.detail-table-section {
+    background: var(--bg-card, #16162a);
+    border: 1px solid var(--border, rgba(255,255,255,.07));
+    border-radius: var(--r-lg, 12px);
+    overflow: hidden;
+}
+
+.detail-table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,.07));
+    background: rgba(255,255,255,.02);
+}
+
+.detail-table-section .entry-table-wrap {
+    border: none;
+    border-radius: 0;
+    margin-top: 0;
+}
+
+/* ── Light theme ─────────────────────────────────────────────── */
+[data-theme="light"] .team-card-clickable:hover {
+    border-color: rgba(245,158,11,.5);
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+}
+
+[data-theme="light"] .team-card-members {
+    background: rgba(0,0,0,.025);
+    border-color: rgba(0,0,0,.06);
+}
+
+[data-theme="light"] .team-member-pill {
+    background: rgba(245,158,11,.08);
+    border-color: rgba(245,158,11,.25);
+}
+
+[data-theme="light"] .detail-stats-strip,
+[data-theme="light"] .detail-members-section,
+[data-theme="light"] .detail-table-section {
+    background: #ffffff;
+    border-color: rgba(0,0,0,.08);
+}
+
+[data-theme="light"] .detail-stat {
+    border-right-color: rgba(0,0,0,.07);
+}
+
+[data-theme="light"] .detail-table-header {
+    background: rgba(0,0,0,.02);
+    border-bottom-color: rgba(0,0,0,.07);
+}
 [data-theme="light"] .nav-tree-toggle:hover,
 [data-theme="light"] .nav-tree-child:hover {
     background: rgba(0,0,0,.05);

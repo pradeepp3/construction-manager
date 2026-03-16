@@ -621,10 +621,10 @@ async function deleteElectricianPayment(paymentId) {
 async function initializeDashboard() {
     if (!AppState.currentProject) return;
 
-    const p = AppState.currentProject;
+    const p           = AppState.currentProject;
     const totalBudget = p.budget || 0;
 
-    // Fetch actual financial summary from the database
+    // Fetch financial summary — now includes all new labour collections
     let summary = { labourCost: 0, materialCost: 0, equipmentCost: 0, otherExpenses: 0, totalCost: 0 };
     try {
         const summaryRes = await window.api.finance.getSummary(p._id);
@@ -632,40 +632,39 @@ async function initializeDashboard() {
     } catch (e) { console.error('Dashboard finance summary error:', e); }
 
     const totalSpent = summary.totalCost;
-    const remaining = totalBudget - totalSpent;
-    const remainPct = totalBudget > 0 ? ((remaining / totalBudget) * 100).toFixed(1) : 0;
-    const usePct = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+    const remaining  = totalBudget - totalSpent;
+    const remainPct  = totalBudget > 0 ? ((remaining / totalBudget) * 100).toFixed(1) : 0;
+    // Calculate raw spent percentage; if no budget is set but there are expenses, treat as unbounded
+    const rawUsePct  = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : (totalSpent > 0 ? 100 : 0);
+    const usePct     = Math.min(rawUsePct, 100);
 
-    // Animate budget total counter
+    // Animate counters
     animateCounter('dashTotalBudget', totalBudget, true);
-    document.getElementById('dashLabourCost').textContent = formatCurrency(summary.labourCost);
+    document.getElementById('dashLabourCost').textContent   = formatCurrency(summary.labourCost);
     document.getElementById('dashMaterialCost').textContent = formatCurrency(summary.materialCost);
-    document.getElementById('dashEquipCost').textContent = formatCurrency(summary.equipmentCost);
+    document.getElementById('dashEquipCost').textContent    = formatCurrency(summary.equipmentCost);
     const otherEl = document.getElementById('dashOtherCost');
     if (otherEl) otherEl.textContent = formatCurrency(summary.otherExpenses);
 
     const pctEl = document.getElementById('dashRemainingPct');
     if (pctEl) {
         pctEl.textContent = `${remainPct}%`;
-        pctEl.className = 'trend ' + (remainPct < 20 ? 'down' : remainPct < 50 ? 'neutral' : 'up');
+        pctEl.className   = 'trend ' + (remainPct < 20 ? 'down' : remainPct < 50 ? 'neutral' : 'up');
     }
-
     const spentEl = document.getElementById('budgetSpentPct');
-    if (spentEl) spentEl.textContent = `${usePct.toFixed(0)}%`;
+    if (spentEl) spentEl.textContent = formatSpentPct(rawUsePct);
 
-    // Progress bar
     setTimeout(() => {
         const bar = document.getElementById('dashBudgetBar');
         if (bar) {
             bar.style.width = `${usePct}%`;
-            if (usePct > 90) bar.style.background = 'var(--danger)';
+            if      (usePct > 90) bar.style.background = 'var(--danger)';
             else if (usePct > 70) bar.style.background = 'linear-gradient(90deg, var(--warning), var(--brand))';
+            else                  bar.style.background = '';
         }
     }, 200);
 
-    // Chart.js donut with actual spending data
     renderBudgetDonut(summary, totalBudget);
-
     loadDashboardCounts(p._id, summary, totalBudget);
 }
 
@@ -765,64 +764,146 @@ function animateCounter(elemId, target, isCurrency) {
 const avatarColors = ['av-1', 'av-2', 'av-3', 'av-4', 'av-5', 'av-6'];
 
 async function loadDashboardCounts(projectId, summary, totalBudget) {
-    summary     = normalizeFinancialSummary(summary || { labourCost: 0, materialCost: 0, equipmentCost: 0, otherExpenses: 0, totalCost: 0 });
+    summary     = normalizeFinancialSummary(summary || {});
     totalBudget = toNumber(totalBudget ?? (AppState.currentProject ? AppState.currentProject.budget : 0));
 
     const notifications = [];
 
     try {
-        const labourRes = await window.api.labour.getAll(projectId);
-        if (labourRes.success) {
-            const workers = labourRes.data;
-            const teamList = document.getElementById('dashTeamList');
-            if (teamList) {
-                let teamListHtml = '';
-                if (workers.length === 0) {
-                    teamListHtml = '<div class="text-muted text-center" style="padding:2rem 0;">No workers added yet</div>';
-                } else {
-                    workers.slice(0, 5).forEach((w, i) => {
-                        const active = toNumber(w.totalCost) > 0 || w.category === 'Electrician';
-                        const avClass = avatarColors[i % avatarColors.length];
-                        teamListHtml += `
-                            <div class="list-widget-item">
-                                <div class="user-avatar-group">
-                                    <div class="user-avatar ${avClass}">${w.name.charAt(0).toUpperCase()}</div>
-                                    <div class="user-info">
-                                        <span class="name">${escapeHtml(w.name)}</span>
-                                        <span class="status">${w.category}</span>
-                                    </div>
-                                </div>
-                                <div class="trend ${active ? 'up' : 'neutral'}">${active ? 'Active' : 'Idle'}</div>
-                            </div>`;
-                    });
-                    if (workers.length > 5) {
-                        teamListHtml += `<div style="text-align:center;padding:.5rem 0;font-size:.75rem;color:var(--text-muted);">+${workers.length - 5} more workers</div>`;
-                    }
-                }
-                replaceHtml(teamList, teamListHtml);
-            }
+        // ── Team Pulse ─────────────────────────────────────────
+        // Collect workers from BOTH old and new labour collections
+        const [legacyRes, masonRes, centRes, concRes, epRes, tilesRes, paintRes] = await Promise.all([
+            window.api.labour.getAll(projectId).catch(() => ({ success: false, data: [] })),
+            window.api.labour.masonry.getAllEntries(projectId).catch(() => ({ success: false, data: [] })),
+            window.api.labour.centring.getAllEntries(projectId).catch(() => ({ success: false, data: [] })),
+            window.api.labour.concrete.getAll(projectId).catch(() => ({ success: false, data: [] })),
+            window.api.labour.ep.getAll(projectId).catch(() => ({ success: false, data: [] })),
+            window.api.labour.tiles.getAll(projectId).catch(() => ({ success: false, data: [] })),
+            window.api.labour.painting.getAllEntries(projectId).catch(() => ({ success: false, data: [] })),
+        ]);
 
-            // Notification: workers with no recorded cost
-            const idleWorkers = workers.filter(w => toNumber(w.totalCost) <= 0 && w.category !== 'Electrician');
-            if (idleWorkers.length > 0) {
-                notifications.push({ type: 'warning', icon: 'ph-hard-hat', title: 'Idle Workers', msg: `${idleWorkers.length} worker(s) have no recorded cost yet.` });
+        // Build a combined deduplicated worker list for Team Pulse display
+        const teamPulseWorkers = [];
+        const seenNames = new Set();
+
+        // Legacy workers
+        const legacyWorkers = legacyRes.success ? legacyRes.data : [];
+        legacyWorkers.forEach(w => {
+            const key = String(w.name || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: w.name, category: w.category || 'Worker', hasData: toNumber(w.totalCost) > 0 });
+            }
+        });
+
+        // New module workers — masonry
+        const masonEntries = masonRes.success ? masonRes.data : [];
+        masonEntries.forEach(e => {
+            const key = String(e.workerName || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: e.workerName, category: 'Masonry', hasData: true });
+            }
+        });
+
+        // Centring
+        const centEntries = centRes.success ? centRes.data : [];
+        centEntries.forEach(e => {
+            const key = String(e.workerName || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: e.workerName, category: 'Centring', hasData: true });
+            }
+        });
+
+        // Concrete — team names
+        const concEntries = concRes.success ? concRes.data : [];
+        concEntries.forEach(e => {
+            const key = String(e.teamName || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: e.teamName, category: 'Concrete', hasData: true });
+            }
+        });
+
+        // E&P — worker/team names
+        const epEntries = epRes.success ? epRes.data : [];
+        epEntries.forEach(e => {
+            const key = String(e.workerName || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: e.workerName, category: 'Elec & Plumbing', hasData: true });
+            }
+        });
+
+        // Tiles — mason names
+        const tilesEntries = tilesRes.success ? tilesRes.data : [];
+        tilesEntries.forEach(e => {
+            const key = String(e.masonName || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: e.masonName, category: 'Tiles', hasData: true });
+            }
+        });
+
+        // Painting
+        const paintEntries = paintRes.success ? paintRes.data : [];
+        paintEntries.forEach(e => {
+            const key = String(e.workerName || '').toLowerCase().trim();
+            if (key && !seenNames.has(key)) {
+                seenNames.add(key);
+                teamPulseWorkers.push({ name: e.workerName, category: 'Painting', hasData: true });
+            }
+        });
+
+        // Render Team Pulse
+        const teamList = document.getElementById('dashTeamList');
+        if (teamList) {
+            const avatarColors = ['av-1', 'av-2', 'av-3', 'av-4', 'av-5', 'av-6'];
+            if (teamPulseWorkers.length === 0) {
+                teamList.innerHTML = '<div class="text-muted text-center" style="padding:2rem 0;">No workers added yet</div>';
+            } else {
+                const displayWorkers = teamPulseWorkers.slice(0, 6);
+                teamList.innerHTML = displayWorkers.map((w, i) => `
+                    <div class="list-widget-item">
+                        <div class="user-avatar-group">
+                            <div class="user-avatar ${avatarColors[i % avatarColors.length]}">${(w.name || '?').charAt(0).toUpperCase()}</div>
+                            <div class="user-info">
+                                <span class="name">${escapeHtml(w.name || '')}</span>
+                                <span class="status">${escapeHtml(w.category)}</span>
+                            </div>
+                        </div>
+                        <div class="trend ${w.hasData ? 'up' : 'neutral'}">${w.hasData ? 'Active' : 'Idle'}</div>
+                    </div>`).join('') +
+                    (teamPulseWorkers.length > 6
+                        ? `<div style="text-align:center;padding:.5rem 0;font-size:.75rem;color:var(--text-muted);">+${teamPulseWorkers.length - 6} more</div>`
+                        : '');
             }
         }
 
+        // Notification: legacy idle workers
+        const idleWorkers = legacyWorkers.filter(w => toNumber(w.totalCost) <= 0 && w.category !== 'Electrician');
+        if (idleWorkers.length > 0) {
+            notifications.push({ type: 'warning', icon: 'ph-hard-hat', title: 'Idle Workers', msg: `${idleWorkers.length} worker(s) have no recorded cost yet.` });
+        }
+
+        // ── Materials ─────────────────────────────────────────
         const matRes = await window.api.materials.getAll(projectId);
         if (matRes.success) {
             animateCounter('dashMaterialCount', matRes.data.length, false);
             const lowStockItems = matRes.data.filter(m => toNumber(m.quantity) < 10);
             if (lowStockItems.length > 0) {
-                document.getElementById('dashLowStockBadge').style.display = 'inline-flex';
+                const badge = document.getElementById('dashLowStockBadge');
+                if (badge) badge.style.display = 'inline-flex';
                 notifications.push({ type: 'warning', icon: 'ph-package', title: 'Low Stock Alert', msg: `${lowStockItems.length} material(s) have quantity below 10.` });
             }
         }
 
+        // ── Equipment ─────────────────────────────────────────
         const eqRes = await window.api.equipment.getAll(projectId);
         if (eqRes.success) animateCounter('dashEquipmentCount', eqRes.data.length, false);
 
-        // Budget-based notifications derived from real financial data
+        // ── Budget notifications ───────────────────────────────
         if (totalBudget > 0) {
             const usedPct = (summary.totalCost / totalBudget) * 100;
             if (usedPct >= 100) {
@@ -838,20 +919,15 @@ async function loadDashboardCounts(projectId, summary, totalBudget) {
             notifications.push({ type: 'info', icon: 'ph-currency-inr', title: 'No Budget Set', msg: 'Set a project budget in Finance to enable tracking.' });
         }
 
-        // Update alert count and notification badge
+        // Update alert count and badge
         const alertVal = notifications.length;
         animateCounter('dashAlertCount', alertVal, false);
         const badge = document.getElementById('notifBadge');
         if (badge) {
-            if (alertVal > 0) {
-                badge.textContent = alertVal > 9 ? '9+' : alertVal;
-                badge.style.display = 'flex';
-            } else {
-                badge.style.display = 'none';
-            }
+            badge.textContent    = alertVal > 9 ? '9+' : alertVal;
+            badge.style.display  = alertVal > 0 ? 'flex' : 'none';
         }
 
-        // Store globally so the notification panel can read them
         window._appNotifications = notifications;
 
     } catch (e) {
@@ -973,10 +1049,24 @@ async function refreshCurrentProjectState(projectId = AppState.currentProject &&
 
 // Format currency
 function formatCurrency(amount) {
+    const val = toNumber(amount);
+    if (val === 0) return '₹0.00';
     return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR'
-    }).format(toNumber(amount));
+    }).format(val);
+}
+
+// Format spent percentage with smart precision
+// - Shows at least 2 decimal places for very small values (e.g. 0.01%)
+// - 1 decimal for values < 10% (e.g. 4.3%)
+// - 0 decimals for >= 10% (e.g. 14%)
+function formatSpentPct(pct) {
+    if (pct === 0) return '0%';
+    if (pct < 0.01) return '< 0.01%';
+    if (pct < 1)   return `${pct.toFixed(2)}%`;
+    if (pct < 10)  return `${pct.toFixed(1)}%`;
+    return `${Math.min(pct, 100).toFixed(0)}%`;
 }
 
 // Format date
