@@ -3,6 +3,25 @@
 let allMaterials = [];
 const materialCategories = ['Cement', 'Steel', 'Bricks', 'Sand', 'Gravel', 'Wood', 'Paint', 'Other'];
 
+// ── Category → Unit mapping ──────────────────────────────────
+const categoryUnitMap = {
+    'Steel':  'Price / Ton',
+    'Cement': 'Number of Bags / Price',
+    'Gravel': 'Price / Ton',
+    'Sand':   'Price / Ton',
+    'Paint':  'Price / Litres',
+    'Bricks': 'Price / Brick',
+    'Wood':   'Price / Feet',
+    'Other':  ''
+};
+
+// Called by the category <select> onchange — updates Unit field instantly
+function updateMaterialUnit() {
+    const category = document.getElementById('materialCategory').value;
+    const unitEl   = document.getElementById('materialUnit');
+    if (unitEl) unitEl.value = categoryUnitMap[category] || '';
+}
+
 async function loadMaterialsView() {
     if (!AppState.currentProject) {
         return `
@@ -34,14 +53,10 @@ async function loadMaterialsView() {
             </div>
             
             <!-- Summary Cards -->
-            <div class="grid grid-4 mt-2">
+            <div class="grid grid-3 mt-2">
                 <div class="stat-card card-gradient-1">
                     <div class="stat-label">Total Materials</div>
                     <div class="stat-value">${allMaterials.length}</div>
-                </div>
-                <div class="stat-card card-gradient-2">
-                    <div class="stat-label">Total Quantity</div>
-                    <div class="stat-value">${totalQuantity.toLocaleString()}</div>
                 </div>
                 <div class="stat-card card-gradient-3">
                     <div class="stat-label">Total Cost</div>
@@ -73,12 +88,13 @@ async function loadMaterialsView() {
                     
                     <div class="grid grid-2 gap">
                         <div class="form-group">
-                            <label class="form-label">Material Name</label>
+                            <label class="form-label">Broker Name</label>
                             <input type="text" id="materialName" class="form-input" required />
                         </div>
                         <div class="form-group">
                             <label class="form-label">Category</label>
-                            <select id="materialCategory" class="form-select" required>
+                            <select id="materialCategory" class="form-select" required
+                                    onchange="updateMaterialUnit()">
                                 ${materialCategories.map(cat => `
                                     <option value="${cat}">${cat}</option>
                                 `).join('')}
@@ -93,8 +109,8 @@ async function loadMaterialsView() {
                         </div>
                         <div class="form-group">
                             <label class="form-label">Unit</label>
-                            <input type="text" id="materialUnit" class="form-input" 
-                                   placeholder="kg, bags, tons, etc." required />
+                            <input type="text" id="materialUnit" class="form-input"
+                                   placeholder="Auto-filled by category" required />
                         </div>
                         <div class="form-group">
                             <label class="form-label">Unit Price (₹)</label>
@@ -201,6 +217,8 @@ function showAddMaterialModal() {
     document.getElementById('materialModalTitle').textContent = 'Add Material';
     document.getElementById('materialForm').reset();
     document.getElementById('materialId').value = '';
+    // Set unit based on the default (first) category after reset
+    updateMaterialUnit();
     showModal('materialModal');
 }
 
@@ -231,7 +249,7 @@ async function handleSaveMaterial() {
 
         // Professional Validation
         if (!name) {
-            showAlert('Please enter a material name', 'warning');
+            showAlert('Please enter a broker name', 'warning');
             document.getElementById('materialName').focus();
             return;
         }
@@ -313,3 +331,5 @@ window.showAddMaterialModal = showAddMaterialModal;
 window.editMaterial = editMaterial;
 window.handleSaveMaterial = handleSaveMaterial;
 window.deleteMaterial = deleteMaterial;
+window.updateMaterialUnit = updateMaterialUnit;
+

@@ -1329,55 +1329,76 @@ async function deleteConcreteEntry(id) { await deleteConcreteEntryFromDetail(id)
 // ════════════════════════════════════════════════════════════
 // 4 — ELECTRICAL & PLUMBING
 // ════════════════════════════════════════════════════════════
+// No separate team collection — entries are grouped by workerName
+// to produce virtual contractor cards, identical UI to masonry.
+// ════════════════════════════════════════════════════════════
+
+// ── Helper: group E&P entries by workerName ──────────────────
+function groupEPByWorker(entries) {
+    const map = new Map();
+    for (const e of entries) {
+        const raw = String(e.workerName || '').trim();
+        const key = raw.toLowerCase();
+        if (!key) continue;
+        if (!map.has(key)) {
+            map.set(key, {
+                workerName: raw.replace(/\b\w/g, c => c.toUpperCase()),
+                entries: []
+            });
+        }
+        map.get(key).entries.push(e);
+    }
+    return [...map.values()].sort((a, b) => a.workerName.localeCompare(b.workerName));
+}
+
+// ── Team (contractor) list view ──────────────────────────────
 async function loadEPView(projectId) {
-    const res = await window.api.labour.ep.getAll(projectId);
-    const entries = res.success ? res.data : [];
-    const totalCost = entries.reduce((s, e) => s + parseFloat(e.amount||0), 0);
+    const res        = await window.api.labour.ep.getAll(projectId);
+    const allEntries = res.success ? res.data : [];
+    const contractors = groupEPByWorker(allEntries);
+    const grandCost  = allEntries.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
 
     let html = `
         <div class="lsub-header">
             <div>
-                <h3 class="lsub-title"><i class="ph ph-lightning"></i> Elec & Plumbing</h3>
-                <p class="lsub-desc">Track electrical and plumbing contractor payments</p>
+                <h3 class="lsub-title"><i class="ph ph-lightning"></i> Elec &amp; Plumbing</h3>
+                <p class="lsub-desc">Click a contractor card to view records and add new entries</p>
             </div>
             <div class="flex gap-sm">
-                <div class="lsub-stat-chip"><i class="ph ph-currency-inr"></i> Total: ${fmt(totalCost)}</div>
-                <button class="btn btn-primary btn-sm" onclick="showEPModal()"><i class="ph ph-plus"></i> Add Work</button>
+                ${allEntries.length > 0 ? `<div class="lsub-stat-chip"><i class="ph ph-currency-inr"></i> Total: ${fmt(grandCost)}</div>` : ''}
+                <button class="btn btn-primary btn-sm" onclick="showEPAddContractorPrompt()">
+                    <i class="ph ph-plus"></i> Add Work
+                </button>
             </div>
         </div>`;
 
-    if (!entries.length) {
-        html += emptyState('ph-lightning', 'No E&P Records', 'Add your first electrical or plumbing work entry.', 'showEPModal()', 'Add Work');
+    if (contractors.length === 0) {
+        html += emptyState('ph-lightning', 'No E&amp;P Records', 'Add your first electrical or plumbing work entry.', 'showEPAddContractorPrompt()', 'Add Work');
     } else {
-        html += `<div class="entry-table-wrap"><table>
-            <thead><tr><th>Date</th><th>Worker / Team</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr></thead>
-            <tbody>${entries.map(e => `<tr>
-                <td>${fmtDate(e.date)}</td>
-                <td><strong>${esc(e.workerName)}</strong></td>
-                <td>${esc(e.description)}</td>
-                <td>${fmt(e.amount)}</td>
-                <td>${esc(e.notes||'—')}</td>
-                <td><button class="btn btn-sm btn-danger" onclick="deleteEPEntry('${e._id}')"><i class="ph ph-trash"></i></button></td>
-            </tr>`).join('')}</tbody>
-        </table></div>`;
+        html += '<div class="team-grid">' + contractors.map(c => epContractorCard(c)).join('') + '</div>';
     }
 
-    html += `<div id="epModal" class="modal">
-        <div class="modal-content" style="max-width:480px;">
+    // Contractor prompt modal
+    html += `
+    <div id="epContractorPromptModal" class="modal">
+        <div class="modal-content" style="max-width:420px;">
             <div class="modal-header">
-                <h3 class="modal-title"><i class="ph ph-lightning"></i> Add E&P Work</h3>
-                <button class="modal-close" onclick="hideModal('epModal')"><i class="ph ph-x"></i></button>
+                <h3 class="modal-title"><i class="ph ph-lightning"></i> Add E&amp;P Work</h3>
+                <button class="modal-close" onclick="hideModal('epContractorPromptModal')"><i class="ph ph-x"></i></button>
             </div>
-            <div class="grid grid-2 gap">
-                <div class="form-group"><label class="form-label">Date</label><input type="date" id="epDate" class="form-input" /></div>
-                <div class="form-group"><label class="form-label">Worker / Team Name</label><input type="text" id="epWorker" class="form-input" placeholder="Name" /></div>
+            <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;">
+                Enter the contractor or worker name to open their record sheet.
+            </p>
+            <div class="form-group">
+                <label class="form-label">Worker / Contractor Name</label>
+                <input type="text" id="epNewContractorName" class="form-input"
+                       placeholder="e.g. Rajan Electricals" />
             </div>
-            <div class="form-group"><label class="form-label">Work Description</label><input type="text" id="epDesc" class="form-input" placeholder="e.g. 1st floor wiring" /></div>
-            <div class="form-group"><label class="form-label">Payment Amount (₹)</label><input type="number" id="epAmount" class="form-input" step="0.01" min="0" /></div>
-            <div class="form-group"><label class="form-label">Notes</label><input type="text" id="epNotes" class="form-input" placeholder="Optional" /></div>
             <div class="flex gap">
-                <button class="btn btn-outline" onclick="hideModal('epModal')">Cancel</button>
-                <button class="btn btn-primary" onclick="saveEPEntry()"><i class="ph ph-check"></i> Save</button>
+                <button class="btn btn-outline" onclick="hideModal('epContractorPromptModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="openEPContractorFromPrompt()">
+                    <i class="ph ph-arrow-right"></i> Open Sheet
+                </button>
             </div>
         </div>
     </div>`;
@@ -1385,96 +1406,405 @@ async function loadEPView(projectId) {
     return labourShell('ep', html);
 }
 
-function showEPModal() {
-    document.getElementById('epDate').value = todayDate();
-    ['epWorker','epDesc','epNotes'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('epAmount').value = '';
+// ── Contractor card — clickable, no Add/View buttons ─────────
+function epContractorCard(contractor) {
+    const entries    = contractor.entries || [];
+    const totalCost  = entries.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+    const totalWork  = entries.length;
+
+    // Unique work descriptions as member pills
+    const seen = new Set();
+    const uniqueDescs = [];
+    for (const e of entries) {
+        const key = String(e.description || '').toLowerCase().trim();
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            uniqueDescs.push(String(e.description).trim());
+        }
+    }
+
+    const descPills = uniqueDescs.length > 0
+        ? `<div class="team-member-pills">
+            ${uniqueDescs.map(d => `<span class="team-member-pill" style="background:rgba(245,158,11,.1);color:#f59e0b;border-color:rgba(245,158,11,.2);">${esc(d)}</span>`).join('')}
+           </div>`
+        : `<p class="team-no-members">No work items recorded yet</p>`;
+
+    return `
+        <div class="team-card team-card-clickable"
+             onclick="openEPContractorDetail('${esc(contractor.workerName)}')">
+            <div class="team-card-head">
+                <div class="team-card-avatar" style="background:rgba(245,158,11,.15);color:#f59e0b;">
+                    <i class="ph ph-lightning"></i>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div class="team-card-name">${esc(contractor.workerName)}</div>
+                    <div class="team-card-meta">${totalWork} work record(s)</div>
+                </div>
+                <button class="btn btn-danger btn-sm"
+                        onclick="event.stopPropagation(); deleteEPContractorAll('${esc(contractor.workerName)}')"
+                        title="Delete all records for this contractor">
+                    <i class="ph ph-trash"></i>
+                </button>
+            </div>
+
+            <div class="team-card-stats">
+                <div class="tcs">
+                    <span class="tcs-label">Records</span>
+                    <span class="tcs-val">${totalWork}</span>
+                </div>
+                <div class="tcs">
+                    <span class="tcs-label">Work Types</span>
+                    <span class="tcs-val">${uniqueDescs.length}</span>
+                </div>
+                <div class="tcs">
+                    <span class="tcs-label">Total Paid</span>
+                    <span class="tcs-val">${fmt(totalCost)}</span>
+                </div>
+            </div>
+
+            <div class="team-card-members">
+                <div class="team-members-label">
+                    <i class="ph ph-wrench"></i> Work Types
+                    <span class="team-members-count">${uniqueDescs.length}</span>
+                </div>
+                ${descPills}
+            </div>
+
+            <div class="team-card-footer">
+                <span class="team-card-hint"><i class="ph ph-arrow-right"></i> Click to view &amp; add records</span>
+            </div>
+        </div>`;
+}
+
+// ── Prompt helpers ───────────────────────────────────────────
+function showEPAddContractorPrompt() {
+    const el = document.getElementById('epNewContractorName');
+    if (el) el.value = '';
+    showModal('epContractorPromptModal');
+}
+
+function openEPContractorFromPrompt() {
+    const name = (document.getElementById('epNewContractorName').value || '').trim();
+    if (!name) { showToast('Enter contractor name', 'warning'); return; }
+    hideModal('epContractorPromptModal');
+    openEPContractorDetail(name);
+}
+
+// ── Contractor Detail Page ───────────────────────────────────
+async function openEPContractorDetail(workerName) {
+    window._epDetailWorkerName = workerName;
+
+    const viewContainer = document.getElementById('view-container');
+    const subBody       = document.getElementById('labour-sub-body');
+    const target        = subBody || viewContainer;
+    if (!target) return;
+
+    target.innerHTML = '<div class="labour-loading" style="padding:3rem;"><div class="labour-spin"></div><span>Loading contractor…</span></div>';
+
+    const projId     = AppState.currentProject._id;
+    const res        = await window.api.labour.ep.getAll(projId);
+    const allEntries = res.success ? res.data : [];
+    const entries    = allEntries.filter(e =>
+        String(e.workerName || '').toLowerCase().trim() === String(workerName).toLowerCase().trim()
+    );
+
+    const html = `<div class="labour-page animate-fade-in">
+        <div id="labour-sub-body" class="labour-sub-body">
+            ${epDetailPage(workerName, entries)}
+        </div>
+    </div>`;
+
+    if (viewContainer) {
+        viewContainer.innerHTML = html;
+    } else {
+        target.innerHTML = epDetailPage(workerName, entries);
+    }
+
+    setTimeout(() => {
+        document.querySelectorAll('.nav-tree-child').forEach(b => b.classList.remove('active'));
+        const btn = document.querySelector('.nav-tree-child[data-labour-sub="ep"]');
+        if (btn) btn.classList.add('active');
+        const toggle = document.getElementById('labour-tree-toggle');
+        if (toggle) toggle.classList.add('open', 'active');
+        const children = document.getElementById('labour-tree-children');
+        if (children) children.classList.add('open');
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    }, 0);
+}
+
+function epDetailPage(workerName, entries) {
+    const totalCost = entries.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+    const totalWork = entries.length;
+
+    // Unique work descriptions for member pills
+    const seen = new Set(); const uniqueDescs = [];
+    entries.forEach(e => {
+        const key = String(e.description || '').toLowerCase().trim();
+        if (key && !seen.has(key)) { seen.add(key); uniqueDescs.push(String(e.description).trim()); }
+    });
+
+    const tableRows = entries.length === 0
+        ? `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">
+               No records yet. Click <strong>Add Work</strong> to start.
+           </td></tr>`
+        : [...entries].sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => `
+            <tr>
+                <td>${fmtDate(e.date)}</td>
+                <td>${esc(e.description)}</td>
+                <td style="font-family:var(--font-mono,monospace);">${fmt(e.amount)}</td>
+                <td style="color:var(--text-muted);font-size:.8rem;">${esc(e.notes || '—')}</td>
+                <td>
+                    <button class="btn btn-sm btn-danger"
+                            onclick="deleteEPEntryFromDetail('${e._id}')"
+                            title="Delete record">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </td>
+            </tr>`).join('');
+
+    return `
+        <div class="detail-page-header">
+            <button class="btn btn-outline btn-sm" onclick="backToEPList()">
+                <i class="ph ph-arrow-left"></i> All Contractors
+            </button>
+            <div class="detail-page-title">
+                <div class="team-card-avatar" style="width:36px;height:36px;font-size:1rem;background:rgba(245,158,11,.15);color:#f59e0b;">
+                    <i class="ph ph-lightning"></i>
+                </div>
+                <div>
+                    <h3 style="margin:0;font-size:1rem;font-weight:700;color:var(--text-primary);">${esc(workerName)}</h3>
+                    <span class="team-card-meta">Elec &amp; Plumbing Contractor</span>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="showEPEntryModalFromDetail()">
+                <i class="ph ph-plus"></i> Add Work
+            </button>
+        </div>
+
+        <div class="detail-stats-strip">
+            <div class="detail-stat"><span class="tcs-label">Total Records</span><span class="tcs-val">${totalWork}</span></div>
+            <div class="detail-stat"><span class="tcs-label">Work Types</span><span class="tcs-val">${uniqueDescs.length}</span></div>
+            <div class="detail-stat"><span class="tcs-label">Total Paid</span>
+                <span class="tcs-val" style="color:var(--success,#10b981);">${fmt(totalCost)}</span>
+            </div>
+        </div>
+
+        ${uniqueDescs.length > 0 ? `
+        <div class="detail-members-section">
+            <div class="team-members-label" style="margin-bottom:.6rem;">
+                <i class="ph ph-wrench"></i> Work Categories
+            </div>
+            <div class="team-member-pills">
+                ${uniqueDescs.map(d => `<span class="team-member-pill" style="background:rgba(245,158,11,.1);color:#f59e0b;border-color:rgba(245,158,11,.2);">${esc(d)}</span>`).join('')}
+            </div>
+        </div>` : ''}
+
+        <div class="detail-table-section">
+            <div class="detail-table-header">
+                <span style="font-size:.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">
+                    All Records <span style="font-weight:400;margin-left:.4rem;">(${totalWork})</span>
+                </span>
+            </div>
+            <div class="entry-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Description</th><th>Amount</th>
+                            <th>Notes</th><th style="width:48px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Add Work Modal — lives inside detail page -->
+        <div id="epModal" class="modal">
+            <div class="modal-content" style="max-width:480px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="ph ph-lightning"></i> Add Work —
+                        <span style="color:var(--brand,#f59e0b);">${esc(workerName)}</span>
+                    </h3>
+                    <button class="modal-close" onclick="hideModal('epModal')"><i class="ph ph-x"></i></button>
+                </div>
+                <input type="hidden" id="epWorkerName" value="${esc(workerName)}" />
+                <div class="form-group">
+                    <label class="form-label">Date</label>
+                    <input type="date" id="epDate" class="form-input" value="${todayDate()}" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Work Description</label>
+                    <input type="text" id="epDesc" class="form-input"
+                           placeholder="e.g. 1st floor wiring, bathroom plumbing" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Payment Amount (₹)</label>
+                    <input type="number" id="epAmount" class="form-input" step="0.01" min="0" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <input type="text" id="epNotes" class="form-input" placeholder="Any remarks" />
+                </div>
+                <div class="flex gap">
+                    <button class="btn btn-outline" onclick="hideModal('epModal')">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveEPEntryFromDetail()">
+                        <i class="ph ph-check"></i> Save Record
+                    </button>
+                </div>
+            </div>
+        </div>`;
+}
+
+// ── Navigation helpers ───────────────────────────────────────
+function backToEPList() {
+    window._epDetailWorkerName = null;
+    refreshLabourSub();
+}
+
+function showEPEntryModalFromDetail() {
+    const dateEl = document.getElementById('epDate');
+    const descEl = document.getElementById('epDesc');
+    const amtEl  = document.getElementById('epAmount');
+    const ntEl   = document.getElementById('epNotes');
+    if (dateEl) dateEl.value = todayDate();
+    if (descEl) descEl.value = '';
+    if (amtEl)  amtEl.value  = '';
+    if (ntEl)   ntEl.value   = '';
     showModal('epModal');
 }
 
-async function saveEPEntry() {
-    const date   = document.getElementById('epDate').value;
-    const worker = document.getElementById('epWorker').value.trim();
-    const desc   = document.getElementById('epDesc').value.trim();
-    const amount = parseFloat(document.getElementById('epAmount').value)||0;
-    const notes  = document.getElementById('epNotes').value.trim();
-    if (!date || !worker || !desc) { showToast('Fill date, name and description', 'warning'); return; }
+async function saveEPEntryFromDetail() {
+    const workerName = document.getElementById('epWorkerName').value;
+    const date       = document.getElementById('epDate').value;
+    const desc       = document.getElementById('epDesc').value.trim();
+    const amount     = parseFloat(document.getElementById('epAmount').value) || 0;
+    const notes      = document.getElementById('epNotes').value.trim();
+
+    if (!date)  { showToast('Select a date', 'warning'); return; }
+    if (!desc)  { showToast('Enter work description', 'warning'); return; }
+
     showLoading();
-    const res = await window.api.labour.ep.add({ projectId: AppState.currentProject._id, date, workerName: worker, description: desc, amount, notes });
+    const res = await window.api.labour.ep.add({
+        projectId: AppState.currentProject._id,
+        date, workerName, description: desc, amount, notes
+    });
     hideLoading();
-    if (res.success) { hideModal('epModal'); showToast('Saved', 'success'); await refreshLabourSub(); }
-    else showToast('Failed: ' + res.message, 'danger');
+
+    if (res.success) {
+        hideModal('epModal');
+        showToast('Record saved', 'success');
+        await openEPContractorDetail(workerName);
+    } else {
+        showToast('Failed: ' + res.message, 'danger');
+    }
 }
 
-async function deleteEPEntry(id) {
-    if (!confirm('Delete?')) return;
-    await window.api.labour.ep.delete(id);
-    showToast('Deleted', 'success'); await refreshLabourSub();
+async function deleteEPEntryFromDetail(entryId) {
+    if (!confirm('Delete this record?')) return;
+    const workerName = window._epDetailWorkerName || '';
+    showLoading();
+    await window.api.labour.ep.delete(entryId);
+    hideLoading();
+    showToast('Record deleted', 'success');
+    await openEPContractorDetail(workerName);
 }
+
+async function deleteEPContractorAll(workerName) {
+    if (!confirm(`Delete ALL records for "${workerName}"? This cannot be undone.`)) return;
+    const projId     = AppState.currentProject._id;
+    showLoading();
+    const res        = await window.api.labour.ep.getAll(projId);
+    const toDelete   = res.success ? res.data.filter(e =>
+        String(e.workerName || '').toLowerCase().trim() === String(workerName).toLowerCase().trim()
+    ) : [];
+    for (const e of toDelete) await window.api.labour.ep.delete(e._id);
+    hideLoading();
+    showToast(`${workerName} deleted`, 'success');
+    await refreshLabourSub();
+}
+
+// Legacy stubs
+function showEPModal() { showEPAddContractorPrompt(); }
+async function saveEPEntry() { await saveEPEntryFromDetail(); }
+async function deleteEPEntry(id) { await deleteEPEntryFromDetail(id); }
 
 // ════════════════════════════════════════════════════════════
 // 5 — TILES
 // ════════════════════════════════════════════════════════════
+// No separate team collection — entries grouped by masonName
+// to produce virtual mason cards, identical UI to masonry.
+// ════════════════════════════════════════════════════════════
+
+// ── Helper: group Tiles entries by masonName ─────────────────
+function groupTilesByMason(entries) {
+    const map = new Map();
+    for (const e of entries) {
+        const raw = String(e.masonName || '').trim();
+        const key = raw.toLowerCase();
+        if (!key) continue;
+        if (!map.has(key)) {
+            map.set(key, {
+                masonName: raw.replace(/\b\w/g, c => c.toUpperCase()),
+                entries: []
+            });
+        }
+        map.get(key).entries.push(e);
+    }
+    return [...map.values()].sort((a, b) => a.masonName.localeCompare(b.masonName));
+}
+
+// ── Mason list view ──────────────────────────────────────────
 async function loadTilesView(projectId) {
-    const res = await window.api.labour.tiles.getAll(projectId);
-    const entries = res.success ? res.data : [];
-    const totalSqft = entries.reduce((s, e) => s + parseFloat(e.sqftCompleted||0), 0);
-    const totalCost = entries.reduce((s, e) => s + parseFloat(e.wageAmount||0), 0);
+    const res        = await window.api.labour.tiles.getAll(projectId);
+    const allEntries = res.success ? res.data : [];
+    const masons     = groupTilesByMason(allEntries);
+    const grandCost  = allEntries.reduce((s, e) => s + parseFloat(e.wageAmount    || 0), 0);
+    const grandSqft  = allEntries.reduce((s, e) => s + parseFloat(e.sqftCompleted || 0), 0);
 
     let html = `
         <div class="lsub-header">
             <div>
                 <h3 class="lsub-title"><i class="ph ph-grid-four"></i> Tiles Work</h3>
-                <p class="lsub-desc">Track tiling by sq.ft or daily wages</p>
+                <p class="lsub-desc">Click a mason card to view records and add new entries</p>
             </div>
             <div class="flex gap-sm">
-                <div class="lsub-stat-chip"><i class="ph ph-ruler"></i> ${totalSqft.toFixed(1)} sq.ft</div>
-                <div class="lsub-stat-chip"><i class="ph ph-currency-inr"></i> Total: ${fmt(totalCost)}</div>
-                <button class="btn btn-primary btn-sm" onclick="showTilesModal()"><i class="ph ph-plus"></i> Add Entry</button>
+                ${allEntries.length > 0 ? `
+                    <div class="lsub-stat-chip"><i class="ph ph-ruler"></i> ${grandSqft.toFixed(1)} sq.ft</div>
+                    <div class="lsub-stat-chip"><i class="ph ph-currency-inr"></i> Total: ${fmt(grandCost)}</div>` : ''}
+                <button class="btn btn-primary btn-sm" onclick="showTilesAddMasonPrompt()">
+                    <i class="ph ph-plus"></i> Add Entry
+                </button>
             </div>
         </div>`;
 
-    if (!entries.length) {
-        html += emptyState('ph-grid-four', 'No Tiles Records', 'Add your first tiles work entry.', 'showTilesModal()', 'Add Entry');
+    if (masons.length === 0) {
+        html += emptyState('ph-grid-four', 'No Tiles Records', 'Add your first tiles work entry.', 'showTilesAddMasonPrompt()', 'Add Entry');
     } else {
-        html += `<div class="entry-table-wrap"><table>
-            <thead><tr><th>Date</th><th>Mason</th><th>Helper</th><th>Sq.ft</th><th>Type</th><th>Wage</th><th>Notes</th><th></th></tr></thead>
-            <tbody>${entries.map(e => `<tr>
-                <td>${fmtDate(e.date)}</td>
-                <td>${esc(e.masonName)}</td>
-                <td>${esc(e.helperName||'—')}</td>
-                <td>${e.sqftCompleted||0}</td>
-                <td><span class="role-badge">${esc(e.paymentType)}</span></td>
-                <td>${fmt(e.wageAmount)}</td>
-                <td>${esc(e.notes||'—')}</td>
-                <td><button class="btn btn-sm btn-danger" onclick="deleteTilesEntry('${e._id}')"><i class="ph ph-trash"></i></button></td>
-            </tr>`).join('')}</tbody>
-        </table></div>`;
+        html += '<div class="team-grid">' + masons.map(m => tilesMasonCard(m)).join('') + '</div>';
     }
 
-    html += `<div id="tilesModal" class="modal">
-        <div class="modal-content" style="max-width:500px;">
+    // Mason prompt modal
+    html += `
+    <div id="tilesMasonPromptModal" class="modal">
+        <div class="modal-content" style="max-width:420px;">
             <div class="modal-header">
                 <h3 class="modal-title"><i class="ph ph-grid-four"></i> Add Tiles Entry</h3>
-                <button class="modal-close" onclick="hideModal('tilesModal')"><i class="ph ph-x"></i></button>
+                <button class="modal-close" onclick="hideModal('tilesMasonPromptModal')"><i class="ph ph-x"></i></button>
             </div>
-            <div class="grid grid-2 gap">
-                <div class="form-group"><label class="form-label">Date</label><input type="date" id="tilesDate" class="form-input" /></div>
-                <div class="form-group"><label class="form-label">Payment Type</label>
-                    <select id="tilesPayType" class="form-select"><option value="Sq.ft">Sq.ft</option><option value="Daily Wage">Daily Wage</option></select></div>
+            <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;">
+                Enter the mason name to open their record sheet.
+            </p>
+            <div class="form-group">
+                <label class="form-label">Mason Name</label>
+                <input type="text" id="tilesNewMasonName" class="form-input"
+                       placeholder="e.g. Suresh Mason" />
             </div>
-            <div class="grid grid-2 gap">
-                <div class="form-group"><label class="form-label">Mason Name</label><input type="text" id="tilesMason" class="form-input" placeholder="Mason name" /></div>
-                <div class="form-group"><label class="form-label">Helper Name</label><input type="text" id="tilesHelper" class="form-input" placeholder="Helper name (optional)" /></div>
-            </div>
-            <div class="grid grid-2 gap">
-                <div class="form-group"><label class="form-label">Sq.ft Completed</label><input type="number" id="tilesSqft" class="form-input" step="0.01" min="0" value="0" /></div>
-                <div class="form-group"><label class="form-label">Wage Amount (₹)</label><input type="number" id="tilesWage" class="form-input" step="0.01" min="0" /></div>
-            </div>
-            <div class="form-group"><label class="form-label">Notes</label><input type="text" id="tilesNotes" class="form-input" placeholder="Optional" /></div>
             <div class="flex gap">
-                <button class="btn btn-outline" onclick="hideModal('tilesModal')">Cancel</button>
-                <button class="btn btn-primary" onclick="saveTilesEntry()"><i class="ph ph-check"></i> Save</button>
+                <button class="btn btn-outline" onclick="hideModal('tilesMasonPromptModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="openTilesMasonFromPrompt()">
+                    <i class="ph ph-arrow-right"></i> Open Sheet
+                </button>
             </div>
         </div>
     </div>`;
@@ -1482,35 +1812,347 @@ async function loadTilesView(projectId) {
     return labourShell('tiles', html);
 }
 
-function showTilesModal() {
-    document.getElementById('tilesDate').value = todayDate();
-    ['tilesMason','tilesHelper','tilesNotes'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('tilesSqft').value = '0';
-    document.getElementById('tilesWage').value = '';
+// ── Mason card — clickable, no Add/View buttons ──────────────
+function tilesMasonCard(mason) {
+    const entries     = mason.entries || [];
+    const totalCost   = entries.reduce((s, e) => s + parseFloat(e.wageAmount    || 0), 0);
+    const totalSqft   = entries.reduce((s, e) => s + parseFloat(e.sqftCompleted || 0), 0);
+
+    // Unique helper names as member pills
+    const seenH = new Set(); const uniqueHelpers = [];
+    entries.forEach(e => {
+        const key = String(e.helperName || '').toLowerCase().trim();
+        if (key && !seenH.has(key)) { seenH.add(key); uniqueHelpers.push(String(e.helperName).replace(/\b\w/g, c => c.toUpperCase())); }
+    });
+
+    const helperPills = uniqueHelpers.length > 0
+        ? `<div class="team-member-pills">
+            ${uniqueHelpers.map(h => `<span class="team-member-pill" style="background:rgba(16,185,129,.1);color:#10b981;border-color:rgba(16,185,129,.2);">${esc(h)}</span>`).join('')}
+           </div>`
+        : `<p class="team-no-members">No helpers recorded yet</p>`;
+
+    return `
+        <div class="team-card team-card-clickable"
+             onclick="openTilesMasonDetail('${esc(mason.masonName)}')">
+            <div class="team-card-head">
+                <div class="team-card-avatar" style="background:rgba(16,185,129,.15);color:#10b981;">
+                    <i class="ph ph-grid-four"></i>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div class="team-card-name">${esc(mason.masonName)}</div>
+                    <div class="team-card-meta">${entries.length} record(s) · ${totalSqft.toFixed(1)} sq.ft</div>
+                </div>
+                <button class="btn btn-danger btn-sm"
+                        onclick="event.stopPropagation(); deleteTilesMasonAll('${esc(mason.masonName)}')"
+                        title="Delete all records for this mason">
+                    <i class="ph ph-trash"></i>
+                </button>
+            </div>
+
+            <div class="team-card-stats">
+                <div class="tcs">
+                    <span class="tcs-label">Records</span>
+                    <span class="tcs-val">${entries.length}</span>
+                </div>
+                <div class="tcs">
+                    <span class="tcs-label">Sq.ft Done</span>
+                    <span class="tcs-val">${totalSqft.toFixed(1)}</span>
+                </div>
+                <div class="tcs">
+                    <span class="tcs-label">Total Wage</span>
+                    <span class="tcs-val">${fmt(totalCost)}</span>
+                </div>
+            </div>
+
+            <div class="team-card-members">
+                <div class="team-members-label">
+                    <i class="ph ph-users"></i> Helpers
+                    <span class="team-members-count">${uniqueHelpers.length}</span>
+                </div>
+                ${helperPills}
+            </div>
+
+            <div class="team-card-footer">
+                <span class="team-card-hint"><i class="ph ph-arrow-right"></i> Click to view &amp; add records</span>
+            </div>
+        </div>`;
+}
+
+// ── Prompt helpers ───────────────────────────────────────────
+function showTilesAddMasonPrompt() {
+    const el = document.getElementById('tilesNewMasonName');
+    if (el) el.value = '';
+    showModal('tilesMasonPromptModal');
+}
+
+function openTilesMasonFromPrompt() {
+    const name = (document.getElementById('tilesNewMasonName').value || '').trim();
+    if (!name) { showToast('Enter mason name', 'warning'); return; }
+    hideModal('tilesMasonPromptModal');
+    openTilesMasonDetail(name);
+}
+
+// ── Mason Detail Page ────────────────────────────────────────
+async function openTilesMasonDetail(masonName) {
+    window._tilesDetailMasonName = masonName;
+
+    const viewContainer = document.getElementById('view-container');
+    const subBody       = document.getElementById('labour-sub-body');
+    const target        = subBody || viewContainer;
+    if (!target) return;
+
+    target.innerHTML = '<div class="labour-loading" style="padding:3rem;"><div class="labour-spin"></div><span>Loading mason…</span></div>';
+
+    const projId     = AppState.currentProject._id;
+    const res        = await window.api.labour.tiles.getAll(projId);
+    const allEntries = res.success ? res.data : [];
+    const entries    = allEntries.filter(e =>
+        String(e.masonName || '').toLowerCase().trim() === String(masonName).toLowerCase().trim()
+    );
+
+    const html = `<div class="labour-page animate-fade-in">
+        <div id="labour-sub-body" class="labour-sub-body">
+            ${tilesDetailPage(masonName, entries)}
+        </div>
+    </div>`;
+
+    if (viewContainer) {
+        viewContainer.innerHTML = html;
+    } else {
+        target.innerHTML = tilesDetailPage(masonName, entries);
+    }
+
+    setTimeout(() => {
+        document.querySelectorAll('.nav-tree-child').forEach(b => b.classList.remove('active'));
+        const btn = document.querySelector('.nav-tree-child[data-labour-sub="tiles"]');
+        if (btn) btn.classList.add('active');
+        const toggle = document.getElementById('labour-tree-toggle');
+        if (toggle) toggle.classList.add('open', 'active');
+        const children = document.getElementById('labour-tree-children');
+        if (children) children.classList.add('open');
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    }, 0);
+}
+
+function tilesDetailPage(masonName, entries) {
+    const totalCost   = entries.reduce((s, e) => s + parseFloat(e.wageAmount    || 0), 0);
+    const totalSqft   = entries.reduce((s, e) => s + parseFloat(e.sqftCompleted || 0), 0);
+
+    // Unique helpers for member pills
+    const seenH = new Set(); const uniqueHelpers = [];
+    entries.forEach(e => {
+        const key = String(e.helperName || '').toLowerCase().trim();
+        if (key && !seenH.has(key)) { seenH.add(key); uniqueHelpers.push(String(e.helperName).replace(/\b\w/g, c => c.toUpperCase())); }
+    });
+
+    const tableRows = entries.length === 0
+        ? `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">
+               No records yet. Click <strong>Add Entry</strong> to start.
+           </td></tr>`
+        : [...entries].sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => `
+            <tr>
+                <td>${fmtDate(e.date)}</td>
+                <td>${esc(e.helperName || '—')}</td>
+                <td style="font-family:var(--font-mono,monospace);">${e.sqftCompleted || 0}</td>
+                <td><span class="role-badge" style="background:rgba(16,185,129,.15);color:#10b981;">${esc(e.paymentType)}</span></td>
+                <td style="font-family:var(--font-mono,monospace);">${fmt(e.wageAmount)}</td>
+                <td style="color:var(--text-muted);font-size:.8rem;">${esc(e.notes || '—')}</td>
+                <td>
+                    <button class="btn btn-sm btn-danger"
+                            onclick="deleteTilesEntryFromDetail('${e._id}')"
+                            title="Delete record">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </td>
+            </tr>`).join('');
+
+    return `
+        <div class="detail-page-header">
+            <button class="btn btn-outline btn-sm" onclick="backToTilesList()">
+                <i class="ph ph-arrow-left"></i> All Masons
+            </button>
+            <div class="detail-page-title">
+                <div class="team-card-avatar" style="width:36px;height:36px;font-size:1rem;background:rgba(16,185,129,.15);color:#10b981;">
+                    <i class="ph ph-grid-four"></i>
+                </div>
+                <div>
+                    <h3 style="margin:0;font-size:1rem;font-weight:700;color:var(--text-primary);">${esc(masonName)}</h3>
+                    <span class="team-card-meta">Tiles Mason</span>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="showTilesEntryModalFromDetail()">
+                <i class="ph ph-plus"></i> Add Entry
+            </button>
+        </div>
+
+        <div class="detail-stats-strip">
+            <div class="detail-stat"><span class="tcs-label">Total Records</span><span class="tcs-val">${entries.length}</span></div>
+            <div class="detail-stat"><span class="tcs-label">Sq.ft Done</span><span class="tcs-val">${totalSqft.toFixed(1)}</span></div>
+            <div class="detail-stat"><span class="tcs-label">Unique Helpers</span><span class="tcs-val">${uniqueHelpers.length}</span></div>
+            <div class="detail-stat"><span class="tcs-label">Total Wage</span>
+                <span class="tcs-val" style="color:var(--success,#10b981);">${fmt(totalCost)}</span>
+            </div>
+        </div>
+
+        ${uniqueHelpers.length > 0 ? `
+        <div class="detail-members-section">
+            <div class="team-members-label" style="margin-bottom:.6rem;">
+                <i class="ph ph-users"></i> Helpers Worked With
+            </div>
+            <div class="team-member-pills">
+                ${uniqueHelpers.map(h => `<span class="team-member-pill" style="background:rgba(16,185,129,.1);color:#10b981;border-color:rgba(16,185,129,.2);">${esc(h)}</span>`).join('')}
+            </div>
+        </div>` : ''}
+
+        <div class="detail-table-section">
+            <div class="detail-table-header">
+                <span style="font-size:.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">
+                    All Entries <span style="font-weight:400;margin-left:.4rem;">(${entries.length})</span>
+                </span>
+            </div>
+            <div class="entry-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Helper</th><th>Sq.ft</th>
+                            <th>Type</th><th>Wage</th><th>Notes</th>
+                            <th style="width:48px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Add Entry Modal — lives inside detail page -->
+        <div id="tilesModal" class="modal">
+            <div class="modal-content" style="max-width:500px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="ph ph-grid-four"></i> Add Entry —
+                        <span style="color:var(--brand,#f59e0b);">${esc(masonName)}</span>
+                    </h3>
+                    <button class="modal-close" onclick="hideModal('tilesModal')"><i class="ph ph-x"></i></button>
+                </div>
+                <input type="hidden" id="tilesMasonName" value="${esc(masonName)}" />
+                <div class="grid grid-2 gap">
+                    <div class="form-group">
+                        <label class="form-label">Date</label>
+                        <input type="date" id="tilesDate" class="form-input" value="${todayDate()}" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Payment Type</label>
+                        <select id="tilesPayType" class="form-select">
+                            <option value="Sq.ft">Sq.ft</option>
+                            <option value="Daily Wage">Daily Wage</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Helper Name (optional)</label>
+                    <input type="text" id="tilesHelper" class="form-input" placeholder="Helper name" />
+                </div>
+                <div class="grid grid-2 gap">
+                    <div class="form-group">
+                        <label class="form-label">Sq.ft Completed</label>
+                        <input type="number" id="tilesSqft" class="form-input" step="0.01" min="0" value="0" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Wage Amount (₹)</label>
+                        <input type="number" id="tilesWage" class="form-input" step="0.01" min="0" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <input type="text" id="tilesNotes" class="form-input" placeholder="Any remarks" />
+                </div>
+                <div class="flex gap">
+                    <button class="btn btn-outline" onclick="hideModal('tilesModal')">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveTilesEntryFromDetail()">
+                        <i class="ph ph-check"></i> Save Entry
+                    </button>
+                </div>
+            </div>
+        </div>`;
+}
+
+// ── Navigation helpers ───────────────────────────────────────
+function backToTilesList() {
+    window._tilesDetailMasonName = null;
+    refreshLabourSub();
+}
+
+function showTilesEntryModalFromDetail() {
+    const dateEl = document.getElementById('tilesDate');
+    const helpEl = document.getElementById('tilesHelper');
+    const sqftEl = document.getElementById('tilesSqft');
+    const wgEl   = document.getElementById('tilesWage');
+    const ntEl   = document.getElementById('tilesNotes');
+    if (dateEl) dateEl.value = todayDate();
+    if (helpEl) helpEl.value = '';
+    if (sqftEl) sqftEl.value = '0';
+    if (wgEl)   wgEl.value   = '';
+    if (ntEl)   ntEl.value   = '';
     showModal('tilesModal');
 }
 
-async function saveTilesEntry() {
-    const date    = document.getElementById('tilesDate').value;
-    const mason   = document.getElementById('tilesMason').value.trim();
-    const helper  = document.getElementById('tilesHelper').value.trim();
-    const sqft    = parseFloat(document.getElementById('tilesSqft').value)||0;
-    const wage    = parseFloat(document.getElementById('tilesWage').value)||0;
-    const payType = document.getElementById('tilesPayType').value;
-    const notes   = document.getElementById('tilesNotes').value.trim();
-    if (!date || !mason) { showToast('Fill date and mason name', 'warning'); return; }
+async function saveTilesEntryFromDetail() {
+    const masonName = document.getElementById('tilesMasonName').value;
+    const date      = document.getElementById('tilesDate').value;
+    const helper    = document.getElementById('tilesHelper').value.trim();
+    const sqft      = parseFloat(document.getElementById('tilesSqft').value) || 0;
+    const wage      = parseFloat(document.getElementById('tilesWage').value)  || 0;
+    const payType   = document.getElementById('tilesPayType').value;
+    const notes     = document.getElementById('tilesNotes').value.trim();
+
+    if (!date)  { showToast('Select a date', 'warning'); return; }
+
     showLoading();
-    const res = await window.api.labour.tiles.add({ projectId: AppState.currentProject._id, date, masonName: mason, helperName: helper, sqftCompleted: sqft, wageAmount: wage, paymentType: payType, notes });
+    const res = await window.api.labour.tiles.add({
+        projectId: AppState.currentProject._id,
+        date, masonName, helperName: helper,
+        sqftCompleted: sqft, wageAmount: wage,
+        paymentType: payType, notes
+    });
     hideLoading();
-    if (res.success) { hideModal('tilesModal'); showToast('Saved', 'success'); await refreshLabourSub(); }
-    else showToast('Failed: ' + res.message, 'danger');
+
+    if (res.success) {
+        hideModal('tilesModal');
+        showToast('Entry saved', 'success');
+        await openTilesMasonDetail(masonName);
+    } else {
+        showToast('Failed: ' + res.message, 'danger');
+    }
 }
 
-async function deleteTilesEntry(id) {
-    if (!confirm('Delete?')) return;
-    await window.api.labour.tiles.delete(id);
-    showToast('Deleted', 'success'); await refreshLabourSub();
+async function deleteTilesEntryFromDetail(entryId) {
+    if (!confirm('Delete this entry?')) return;
+    const masonName = window._tilesDetailMasonName || '';
+    showLoading();
+    await window.api.labour.tiles.delete(entryId);
+    hideLoading();
+    showToast('Entry deleted', 'success');
+    await openTilesMasonDetail(masonName);
 }
+
+async function deleteTilesMasonAll(masonName) {
+    if (!confirm(`Delete ALL records for "${masonName}"? This cannot be undone.`)) return;
+    const projId   = AppState.currentProject._id;
+    showLoading();
+    const res      = await window.api.labour.tiles.getAll(projId);
+    const toDelete = res.success ? res.data.filter(e =>
+        String(e.masonName || '').toLowerCase().trim() === String(masonName).toLowerCase().trim()
+    ) : [];
+    for (const e of toDelete) await window.api.labour.tiles.delete(e._id);
+    hideLoading();
+    showToast(`${masonName} deleted`, 'success');
+    await refreshLabourSub();
+}
+
+// Legacy stubs
+function showTilesModal() { showTilesAddMasonPrompt(); }
+async function saveTilesEntry() { await saveTilesEntryFromDetail(); }
+async function deleteTilesEntry(id) { await deleteTilesEntryFromDetail(id); }
 
 // ════════════════════════════════════════════════════════════
 // 6 — PAINTING
@@ -2176,11 +2818,29 @@ window.saveConcreteEntry   = saveConcreteEntry;
 window.deleteConcreteEntry = deleteConcreteEntry;
 
 // ── E&P ──────────────────────────────────────────────────────
+window.showEPAddContractorPrompt      = showEPAddContractorPrompt;
+window.openEPContractorFromPrompt     = openEPContractorFromPrompt;
+window.openEPContractorDetail         = openEPContractorDetail;
+window.backToEPList                   = backToEPList;
+window.showEPEntryModalFromDetail     = showEPEntryModalFromDetail;
+window.saveEPEntryFromDetail          = saveEPEntryFromDetail;
+window.deleteEPEntryFromDetail        = deleteEPEntryFromDetail;
+window.deleteEPContractorAll          = deleteEPContractorAll;
+// legacy stubs
 window.showEPModal   = showEPModal;
 window.saveEPEntry   = saveEPEntry;
 window.deleteEPEntry = deleteEPEntry;
 
 // ── Tiles ────────────────────────────────────────────────────
+window.showTilesAddMasonPrompt        = showTilesAddMasonPrompt;
+window.openTilesMasonFromPrompt       = openTilesMasonFromPrompt;
+window.openTilesMasonDetail           = openTilesMasonDetail;
+window.backToTilesList                = backToTilesList;
+window.showTilesEntryModalFromDetail  = showTilesEntryModalFromDetail;
+window.saveTilesEntryFromDetail       = saveTilesEntryFromDetail;
+window.deleteTilesEntryFromDetail     = deleteTilesEntryFromDetail;
+window.deleteTilesMasonAll            = deleteTilesMasonAll;
+// legacy stubs
 window.showTilesModal   = showTilesModal;
 window.saveTilesEntry   = saveTilesEntry;
 window.deleteTilesEntry = deleteTilesEntry;
