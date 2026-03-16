@@ -445,7 +445,7 @@ async function getFinancialSummary(projectId) {
     const db = getDatabase();
 
     // ── Legacy workers collection (old labour module) ──────────
-    const workers    = await db.collection('workers').find({ projectId }).toArray();
+    const workers = await db.collection('workers').find({ projectId }).toArray();
     const legacyLabour = workers.reduce((sum, w) => {
         const cost = w.wageType === 'sqft'
             ? toNumber(w.sqftRate) * toNumber(w.sqftArea)
@@ -455,35 +455,35 @@ async function getFinancialSummary(projectId) {
 
     // ── New labour module collections ──────────────────────────
     const [masonryEntries, centringEntries, concreteEntries,
-           epEntries, tilesEntries, paintingEntries] = await Promise.all([
-        db.collection('masonry_entries').find({ projectId }).toArray(),
-        db.collection('centring_entries').find({ projectId }).toArray(),
-        db.collection('concrete_entries').find({ projectId }).toArray(),
-        db.collection('ep_entries').find({ projectId }).toArray(),
-        db.collection('tiles_entries').find({ projectId }).toArray(),
-        db.collection('painting_entries').find({ projectId }).toArray(),
-    ]);
+        epEntries, tilesEntries, paintingEntries] = await Promise.all([
+            db.collection('masonry_entries').find({ projectId }).toArray(),
+            db.collection('centring_entries').find({ projectId }).toArray(),
+            db.collection('concrete_entries').find({ projectId }).toArray(),
+            db.collection('ep_entries').find({ projectId }).toArray(),
+            db.collection('tiles_entries').find({ projectId }).toArray(),
+            db.collection('painting_entries').find({ projectId }).toArray(),
+        ]);
 
-    const masonryCost  = masonryEntries.reduce((s, e)  => s + toNumber(e.wageAmount), 0);
+    const masonryCost = masonryEntries.reduce((s, e) => s + toNumber(e.wageAmount), 0);
     const centringCost = centringEntries.reduce((s, e) => s + toNumber(e.wageAmount), 0);
     const concreteCost = concreteEntries.reduce((s, e) => s + toNumber(e.amount), 0);
-    const epCost       = epEntries.reduce((s, e)       => s + toNumber(e.amount), 0);
-    const tilesCost    = tilesEntries.reduce((s, e)    => s + toNumber(e.wageAmount), 0);
+    const epCost = epEntries.reduce((s, e) => s + toNumber(e.amount), 0);
+    const tilesCost = tilesEntries.reduce((s, e) => s + toNumber(e.wageAmount), 0);
     const paintingCost = paintingEntries.reduce((s, e) => s + toNumber(e.wageAmount), 0);
 
     const newLabourCost = masonryCost + centringCost + concreteCost + epCost + tilesCost + paintingCost;
-    const labourCost    = legacyLabour + newLabourCost;
+    const labourCost = legacyLabour + newLabourCost;
 
     // ── Materials ──────────────────────────────────────────────
-    const materials    = await db.collection('materials').find({ projectId }).toArray();
+    const materials = await db.collection('materials').find({ projectId }).toArray();
     const materialCost = materials.reduce((sum, m) => sum + (parseFloat(m.totalCost) || 0), 0);
 
     // ── Equipment ──────────────────────────────────────────────
-    const equipment    = await db.collection('equipment').find({ projectId }).toArray();
+    const equipment = await db.collection('equipment').find({ projectId }).toArray();
     const equipmentCost = equipment.reduce((sum, e) => sum + (parseFloat(e.totalCost) || 0), 0);
 
     // ── Other expenses ─────────────────────────────────────────
-    const expenses     = await db.collection('expenses').find({ projectId }).toArray();
+    const expenses = await db.collection('expenses').find({ projectId }).toArray();
     const otherExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
     return {
@@ -620,9 +620,19 @@ async function getMasonryTeams(projectId) {
 
 async function createMasonryTeam(data) {
     const db = getDatabase();
-    const doc = { ...data, createdAt: new Date() };
+    const doc = { ...data, members: [], createdAt: new Date() };
     const r = await db.collection('masonry_teams').insertOne(doc);
     return { ...doc, _id: r.insertedId.toString() };
+}
+
+async function updateMasonryTeam(teamId, updates) {
+    const db = getDatabase();
+    await db.collection('masonry_teams').updateOne(
+        { _id: new ObjectId(teamId) },
+        { $set: updates }
+    );
+    const updated = await db.collection('masonry_teams').findOne({ _id: new ObjectId(teamId) });
+    return { ...updated, _id: updated._id.toString() };
 }
 
 async function deleteMasonryTeam(teamId) {
@@ -671,9 +681,19 @@ async function getCentringTeams(projectId) {
 
 async function createCentringTeam(data) {
     const db = getDatabase();
-    const doc = { ...data, createdAt: new Date() };
+    const doc = { ...data, members: [], createdAt: new Date() };
     const r = await db.collection('centring_teams').insertOne(doc);
     return { ...doc, _id: r.insertedId.toString() };
+}
+
+async function updateCentringTeam(teamId, updates) {
+    const db = getDatabase();
+    await db.collection('centring_teams').updateOne(
+        { _id: new ObjectId(teamId) },
+        { $set: updates }
+    );
+    const updated = await db.collection('centring_teams').findOne({ _id: new ObjectId(teamId) });
+    return { ...updated, _id: updated._id.toString() };
 }
 
 async function deleteCentringTeam(teamId) {
@@ -708,6 +728,40 @@ async function getAllCentringEntries(projectId) {
 
 // -- CONCRETE -------------------------------------------------
 
+async function getConcreteTeams(projectId) {
+    const db = getDatabase();
+    const teams = await db.collection('concrete_teams').find({ projectId }).sort({ createdAt: 1 }).toArray();
+    const entries = await db.collection('concrete_entries').find({ projectId }).sort({ date: 1 }).toArray();
+    return teams.map(t => ({
+        ...t,
+        _id: t._id.toString(),
+        entries: entries.filter(e => e.teamId === t._id.toString()).map(e => ({ ...e, _id: e._id.toString() }))
+    }));
+}
+
+async function createConcreteTeam(data) {
+    const db = getDatabase();
+    const doc = { ...data, members: [], createdAt: new Date() };
+    const r = await db.collection('concrete_teams').insertOne(doc);
+    return { ...doc, _id: r.insertedId.toString() };
+}
+
+async function updateConcreteTeam(teamId, updates) {
+    const db = getDatabase();
+    await db.collection('concrete_teams').updateOne(
+        { _id: new ObjectId(teamId) },
+        { $set: updates }
+    );
+    const updated = await db.collection('concrete_teams').findOne({ _id: new ObjectId(teamId) });
+    return { ...updated, _id: updated._id.toString() };
+}
+
+async function deleteConcreteTeam(teamId) {
+    const db = getDatabase();
+    await db.collection('concrete_entries').deleteMany({ teamId });
+    await db.collection('concrete_teams').deleteOne({ _id: new ObjectId(teamId) });
+}
+
 async function getAllConcreteEntries(projectId) {
     const db = getDatabase();
     const entries = await db.collection('concrete_entries').find({ projectId }).sort({ date: 1 }).toArray();
@@ -724,6 +778,12 @@ async function addConcreteEntry(data) {
 async function deleteConcreteEntry(entryId) {
     const db = getDatabase();
     await db.collection('concrete_entries').deleteOne({ _id: new ObjectId(entryId) });
+}
+
+async function getConcreteEntries(teamId) {
+    const db = getDatabase();
+    const entries = await db.collection('concrete_entries').find({ teamId }).sort({ date: 1 }).toArray();
+    return entries.map(e => ({ ...e, _id: e._id.toString() }));
 }
 
 // -- ELECTRICAL & PLUMBING ------------------------------------
@@ -813,7 +873,36 @@ async function getPaintingEntries(teamId) {
 async function getAllPaintingEntries(projectId) {
     const db = getDatabase();
     const entries = await db.collection('painting_entries').find({ projectId }).sort({ date: 1 }).toArray();
-    return entries.map(e => ({ ...e, _id: e._id.toString() }));
+}
+
+async function getLabourSettings(projectId) {
+    const db = getDatabase();
+    const settings = await db.collection('labour_settings').findOne({ projectId });
+    const defaults = {
+        projectId,
+        masonWage: 800,
+        menHelperWage: 700,
+        womenHelperWage: 600
+    };
+    if (!settings) return defaults;
+    return { ...defaults, ...settings, _id: settings._id.toString() };
+}
+
+async function updateLabourSettings(projectId, data) {
+    const db = getDatabase();
+    const payload = {
+        projectId,
+        masonWage: toNumber(data.masonWage, 800),
+        menHelperWage: toNumber(data.menHelperWage, 700),
+        womenHelperWage: toNumber(data.womenHelperWage, 600),
+        updatedAt: new Date()
+    };
+    await db.collection('labour_settings').updateOne(
+        { projectId },
+        { $set: payload },
+        { upsert: true }
+    );
+    return payload;
 }
 
 module.exports = {
@@ -850,6 +939,7 @@ module.exports = {
     deleteElectricianPayment,
     getMasonryTeams,
     createMasonryTeam,
+    updateMasonryTeam,
     deleteMasonryTeam,
     addMasonryEntry,
     deleteMasonryEntry,
@@ -857,11 +947,17 @@ module.exports = {
     getAllMasonryEntries,
     getCentringTeams,
     createCentringTeam,
+    updateCentringTeam,
     deleteCentringTeam,
     addCentringEntry,
     deleteCentringEntry,
     getCentringEntries,
     getAllCentringEntries,
+    getConcreteTeams,
+    createConcreteTeam,
+    updateConcreteTeam,
+    deleteConcreteTeam,
+    getConcreteEntries,
     getAllConcreteEntries,
     addConcreteEntry,
     deleteConcreteEntry,
@@ -877,5 +973,7 @@ module.exports = {
     addPaintingEntry,
     deletePaintingEntry,
     getPaintingEntries,
-    getAllPaintingEntries
+    getAllPaintingEntries,
+    getLabourSettings,
+    updateLabourSettings
 };
