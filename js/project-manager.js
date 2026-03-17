@@ -62,10 +62,29 @@ async function loadProjectsView() {
                             <input type="date" id="projectStartDate" class="form-input" required />
                         </div>
                     </div>
+
+                    <!-- Site Photo Upload -->
                     <div class="form-group">
-                        <label class="form-label">Cover Image URL <span style="color:var(--text-muted);font-weight:400;text-transform:none;">(optional)</span></label>
-                        <input type="url" id="projectImage" class="form-input" placeholder="https://example.com/site.jpg" />
+                        <label class="form-label">Site Photo <span style="color:var(--text-muted);font-weight:400;text-transform:none;">(optional)</span></label>
+                        <div id="photoUploadArea"
+                             style="border:2px dashed var(--border);border-radius:var(--r-lg);padding:1.25rem;text-align:center;cursor:pointer;transition:border-color .2s;"
+                             onclick="document.getElementById('projectPhotoInput').click()"
+                             onmouseenter="this.style.borderColor='var(--brand)'"
+                             onmouseleave="this.style.borderColor='var(--border)'">
+                            <div id="photoPreviewArea" style="display:none;">
+                                <img id="photoPreviewImg" style="width:100%;max-height:140px;object-fit:cover;border-radius:var(--r-md);margin-bottom:.5rem;" />
+                                <div style="font-size:.78rem;color:var(--text-muted);">Click to change photo</div>
+                            </div>
+                            <div id="photoPlaceholder">
+                                <i class="ph ph-camera" style="font-size:2rem;color:var(--text-muted);display:block;margin-bottom:.4rem;"></i>
+                                <div style="font-size:.82rem;color:var(--text-muted);">Click to upload site photo</div>
+                                <div style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem;">JPG, PNG, WEBP supported</div>
+                            </div>
+                        </div>
+                        <input type="file" id="projectPhotoInput" accept="image/*" style="display:none;" onchange="handleProjectPhotoSelect(this)" />
+                        <input type="hidden" id="projectPhotoData" />
                     </div>
+
                     <div class="form-group">
                         <label class="form-label">Description</label>
                         <textarea id="projectDescription" class="form-textarea" placeholder="Brief project overview..."></textarea>
@@ -106,8 +125,134 @@ async function loadProjectsView() {
                 </form>
             </div>
         </div>
+
+        <!-- Edit Photo Modal -->
+        <div id="editPhotoModal" class="modal">
+            <div class="modal-content" style="max-width:420px;">
+                <div class="modal-header">
+                    <h3 class="modal-title"><i class="ph ph-camera"></i> Change Site Photo</h3>
+                    <button class="modal-close" onclick="hideModal('editPhotoModal')"><i class="ph ph-x"></i></button>
+                </div>
+                <input type="hidden" id="editPhotoProjectId" />
+                <div id="editPhotoPreviewWrap" style="margin-bottom:1rem;">
+                    <img id="editPhotoPreviewImg" style="width:100%;max-height:160px;object-fit:cover;border-radius:var(--r-md);display:none;" />
+                </div>
+                <div style="border:2px dashed var(--border);border-radius:var(--r-lg);padding:1.25rem;text-align:center;cursor:pointer;"
+                     onclick="document.getElementById('editPhotoFileInput').click()"
+                     onmouseenter="this.style.borderColor='var(--brand)'"
+                     onmouseleave="this.style.borderColor='var(--border)'">
+                    <i class="ph ph-upload-simple" style="font-size:1.8rem;color:var(--text-muted);display:block;margin-bottom:.4rem;"></i>
+                    <div style="font-size:.82rem;color:var(--text-muted);">Click to select a new photo</div>
+                </div>
+                <input type="file" id="editPhotoFileInput" accept="image/*" style="display:none;" onchange="handleEditPhotoSelect(this)" />
+                <input type="hidden" id="editPhotoData" />
+                <div class="flex gap" style="margin-top:1.25rem;">
+                    <button class="btn btn-outline" onclick="hideModal('editPhotoModal')">Cancel</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeProjectPhoto()" style="margin-left:auto;">
+                        <i class="ph ph-trash"></i> Remove Photo
+                    </button>
+                    <button class="btn btn-primary" onclick="saveProjectPhoto()">
+                        <i class="ph ph-check"></i> Save Photo
+                    </button>
+                </div>
+            </div>
+        </div>
     `;
 }
+
+// ── Photo helpers ─────────────────────────────────────────────
+
+function handleProjectPhotoSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const data = e.target.result;
+        document.getElementById('projectPhotoData').value = data;
+        const img = document.getElementById('photoPreviewImg');
+        img.src = data;
+        document.getElementById('photoPreviewArea').style.display = 'block';
+        document.getElementById('photoPlaceholder').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+function openEditPhotoModal(event, projectId) {
+    event.stopPropagation();
+    const project = allProjects.find(p => p._id === projectId);
+    if (!project) return;
+
+    document.getElementById('editPhotoProjectId').value = projectId;
+    document.getElementById('editPhotoData').value = '';
+    document.getElementById('editPhotoFileInput').value = '';
+
+    const prevImg = document.getElementById('editPhotoPreviewImg');
+    if (project.image) {
+        prevImg.src = project.image;
+        prevImg.style.display = 'block';
+    } else {
+        prevImg.style.display = 'none';
+    }
+
+    showModal('editPhotoModal');
+}
+
+function handleEditPhotoSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const data = e.target.result;
+        document.getElementById('editPhotoData').value = data;
+        const img = document.getElementById('editPhotoPreviewImg');
+        img.src = data;
+        img.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+async function saveProjectPhoto() {
+    const projectId = document.getElementById('editPhotoProjectId').value;
+    const photoData = document.getElementById('editPhotoData').value;
+
+    if (!photoData) {
+        showAlert('Please select a photo first', 'warning');
+        return;
+    }
+
+    showLoading();
+    const result = await window.api.projects.update(projectId, { image: photoData });
+    hideLoading();
+
+    if (result && result.success) {
+        showAlert('Photo updated', 'success');
+        hideModal('editPhotoModal');
+        const updatedContent = await loadProjectsView();
+        document.getElementById('view-container').innerHTML = updatedContent;
+    } else {
+        showAlert('Failed to update photo', 'danger');
+    }
+}
+
+async function removeProjectPhoto() {
+    const projectId = document.getElementById('editPhotoProjectId').value;
+    if (!confirm('Remove the site photo for this project?')) return;
+
+    showLoading();
+    const result = await window.api.projects.update(projectId, { image: '' });
+    hideLoading();
+
+    if (result && result.success) {
+        showAlert('Photo removed', 'success');
+        hideModal('editPhotoModal');
+        const updatedContent = await loadProjectsView();
+        document.getElementById('view-container').innerHTML = updatedContent;
+    } else {
+        showAlert('Failed to remove photo', 'danger');
+    }
+}
+
+// ── Render project cards (styles unchanged, photo upload button added) ──
 
 function renderProjectCards(financialSummaries = {}) {
     if (allProjects.length === 0) {
@@ -142,6 +287,22 @@ function renderProjectCards(financialSummaries = {}) {
         const spent = toNumber(summary.totalCost);
         const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
 
+        // Camera edit button — top-right corner like WhatsApp profile
+        // Positioned to not overlap the "Active" badge when selected
+        const cameraEditBtn = `
+            <button onclick="openEditPhotoModal(event, '${project._id}')"
+                    title="Change site photo"
+                    style="position:absolute;top:10px;right:${isSelected ? '74px' : '10px'};
+                           width:28px;height:28px;border-radius:50%;
+                           background:rgba(0,0,0,0.55);border:1.5px solid rgba(255,255,255,0.35);
+                           display:flex;align-items:center;justify-content:center;
+                           cursor:pointer;z-index:10;backdrop-filter:blur(4px);
+                           transition:background .15s;"
+                    onmouseenter="this.style.background='rgba(0,0,0,0.82)'"
+                    onmouseleave="this.style.background='rgba(0,0,0,0.55)'">
+                <i class="ph ph-camera" style="font-size:.82rem;color:#fff;pointer-events:none;"></i>
+            </button>`;
+
         const imgSection = hasImage
             ? `<div style="height:160px;overflow:hidden;border-radius:var(--r-lg) var(--r-lg) 0 0;position:relative;">
                  <img src="${escapeHtml(project.image)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
@@ -149,10 +310,12 @@ function renderProjectCards(financialSummaries = {}) {
                      <i class="ph ph-buildings" style="font-size:3.5rem;color:rgba(0,0,0,0.4);"></i>
                  </div>
                  <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 30%,rgba(6,6,10,.75) 100%);border-radius:var(--r-lg) var(--r-lg) 0 0;"></div>
+                 ${cameraEditBtn}
                </div>`
             : `<div style="height:160px;background:${fallbackGrad};border-radius:var(--r-lg) var(--r-lg) 0 0;display:flex;align-items:center;justify-content:center;position:relative;">
                  <i class="ph ph-buildings" style="font-size:4rem;color:rgba(0,0,0,0.25);"></i>
                  <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 30%,rgba(6,6,10,.4) 100%);border-radius:var(--r-lg) var(--r-lg) 0 0;"></div>
+                 ${cameraEditBtn}
                </div>`;
 
         return `
@@ -200,6 +363,15 @@ function initializeProjects() {
 }
 
 function showAddProjectModal() {
+    // Reset photo upload state each time
+    const photoData = document.getElementById('projectPhotoData');
+    const preview   = document.getElementById('photoPreviewArea');
+    const placeholder = document.getElementById('photoPlaceholder');
+    const fileInput = document.getElementById('projectPhotoInput');
+    if (photoData)    photoData.value = '';
+    if (preview)      preview.style.display = 'none';
+    if (placeholder)  placeholder.style.display = 'block';
+    if (fileInput)    fileInput.value = '';
     showModal('addProjectModal');
 }
 
@@ -215,19 +387,16 @@ async function handleAddProject() {
 
         const startDate = document.getElementById('projectStartDate').value;
 
-        // Validation
         if (!name) {
             showAlert('Please enter project name', 'warning');
             document.getElementById('projectName').focus();
             return;
         }
-
         if (!location) {
             showAlert('Please enter project location', 'warning');
             document.getElementById('projectLocation').focus();
             return;
         }
-
         if (isNaN(budget) || budget <= 0) {
             showAlert('Please enter a valid total budget amount', 'warning');
             document.getElementById('projectBudget').focus();
@@ -235,7 +404,7 @@ async function handleAddProject() {
         }
 
         const totalAllocated = budgetLabour + budgetMaterials + budgetEquipment + budgetOther;
-        if (Math.abs(budget - totalAllocated) > 1) { // Allow 1 rupee floating point difference
+        if (Math.abs(budget - totalAllocated) > 1) {
             if (!confirm(`Total allocated budget (${formatCurrency(totalAllocated)}) does not match Total Budget (${formatCurrency(budget)}). Do you want to proceed anyway?`)) {
                 return;
             }
@@ -254,19 +423,21 @@ async function handleAddProject() {
             return;
         }
 
+        const photoData = document.getElementById('projectPhotoData').value || '';
+
         const projectData = {
-            name: name,
-            location: location,
+            name,
+            location,
             description: document.getElementById('projectDescription').value.trim(),
-            budget: budget,
-            image: document.getElementById('projectImage').value.trim(),
+            budget,
+            image: photoData,
             budgetBreakdown: {
                 labour: budgetLabour,
                 materials: budgetMaterials,
                 equipment: budgetEquipment,
                 other: budgetOther
             },
-            startDate: startDate,
+            startDate,
             createdAt: new Date()
         };
 
@@ -278,7 +449,6 @@ async function handleAddProject() {
             showAlert('Project created successfully!', 'success');
             hideModal('addProjectModal');
             document.getElementById('addProjectForm').reset();
-            // Reload view to show new project
             const updatedContent = await loadProjectsView();
             document.getElementById('view-container').innerHTML = updatedContent;
         } else {
@@ -292,21 +462,15 @@ async function handleAddProject() {
 }
 
 async function selectProject(projectId) {
-    console.log('Selecting project:', projectId);
     showLoading();
     const result = await window.api.projects.getById(projectId);
-    console.log('Selection result:', result);
     hideLoading();
 
     if (result.success && result.data) {
         setCurrentProject(result.data);
-        // Show success alert
         showAlert('Project selected: ' + result.data.name, 'success');
-
-        // Navigate to the new Dashboard view
         navigateTo('dashboard');
     } else {
-        console.error('Project selection failed:', result);
         showAlert('Failed to select project: ' + (result.message || 'Project not found'), 'danger');
     }
 }
@@ -322,7 +486,7 @@ function updateRemainingBudget() {
     const remaining = total - allocated;
 
     const display = document.getElementById('remainingBudgetDisplay');
-    const status = document.getElementById('allocationStatus');
+    const status  = document.getElementById('allocationStatus');
 
     if (display) display.textContent = formatCurrency(remaining);
 
@@ -347,10 +511,15 @@ function escapeHtml(text) {
 }
 
 // Expose functions globally
-window.loadProjectsView = loadProjectsView;
-window.initializeProjects = initializeProjects;
-window.showAddProjectModal = showAddProjectModal;
-window.handleAddProject = handleAddProject;
-window.selectProject = selectProject;
-window.updateRemainingBudget = updateRemainingBudget;
-window.escapeHtml = escapeHtml;
+window.loadProjectsView       = loadProjectsView;
+window.initializeProjects     = initializeProjects;
+window.showAddProjectModal    = showAddProjectModal;
+window.handleAddProject       = handleAddProject;
+window.selectProject          = selectProject;
+window.updateRemainingBudget  = updateRemainingBudget;
+window.escapeHtml             = escapeHtml;
+window.openEditPhotoModal     = openEditPhotoModal;
+window.handleProjectPhotoSelect = handleProjectPhotoSelect;
+window.handleEditPhotoSelect  = handleEditPhotoSelect;
+window.saveProjectPhoto       = saveProjectPhoto;
+window.removeProjectPhoto     = removeProjectPhoto;

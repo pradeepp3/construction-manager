@@ -154,14 +154,6 @@
                     </div>
                 </div>
                 <div class="header-actions">
-                    <div class="search-bar">
-                        <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" placeholder="Search anything... (Ctrl+K)" id="globalSearch">
-                    </div>
-                    <div class="header-icon-btn" title="Notifications" id="notifBtn">
-                        <i class="ph ph-bell"></i>
-                        <span class="notif-badge" id="notifBadge" style="display:none;">3</span>
-                    </div>
                     <div class="user-chip" id="userChip">
                         <div class="user-chip-avatar" id="userAvatarChip">A</div>
                         <span class="user-chip-name" id="userNameChip">Admin</span>
@@ -216,7 +208,6 @@
                 return;
             }
 
-            // Open the tree if not already open
             const children = document.getElementById('labour-tree-children');
             const toggle   = document.getElementById('labour-tree-toggle');
             if (children && !children.classList.contains('open')) {
@@ -224,45 +215,28 @@
                 toggle && toggle.classList.add('open');
             }
 
-            // Highlight the active child
             document.querySelectorAll('.nav-tree-child').forEach(b => b.classList.remove('active'));
             const activeBtn = document.querySelector(`.nav-tree-child[data-labour-sub="${sub}"]`);
             if (activeBtn) activeBtn.classList.add('active');
 
-            // Mark Labour parent toggle as active too
             if (toggle) toggle.classList.add('active');
 
-            // Deactivate other nav items
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
 
-            // Update header
-            const subLabels = {
-                masonry:  'Labour - Masonry',
-                centring: 'Labour - Centring',
-                concrete: 'Labour - Concrete',
-                ep:       'Labour - Electrical & Plumbing',
-                tiles:    'Labour - Tiles',
-                painting: 'Labour - Painting',
-                report:   'Labour - Weekly Report',
-            };
             const headerEl = document.getElementById('headerProjectName');
             if (headerEl && window.AppState.currentProject) {
                 headerEl.textContent = window.AppState.currentProject.name;
             }
 
-            // Set the sub and navigate
             window._labourSub = sub;
             if (window.navigateTo) navigateTo('labour');
         }
 
-        // Keep tree open and child highlighted when on labour view
         const _origNavigateTo = window.navigateTo;
         document.addEventListener('DOMContentLoaded', () => {
-            // Patch navigateTo to handle labour tree state
             const orig = window.navigateTo;
             if (!orig) return;
             window.navigateTo = async function(view) {
-                // When navigating away from labour, clear tree active states
                 if (view !== 'labour') {
                     document.querySelectorAll('.nav-tree-child').forEach(b => b.classList.remove('active'));
                     const t = document.getElementById('labour-tree-toggle');
