@@ -23,17 +23,17 @@ ipcMain.handle('ai:query', async (event, { systemPrompt, userPrompt }) => {
     temperature: 0.2,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user',   content: userPrompt   }
+      { role: 'user', content: userPrompt }
     ]
   });
 
   return new Promise((resolve) => {
     const options = {
       hostname: 'api.groq.com',
-      path:     '/openai/v1/chat/completions',
-      method:   'POST',
+      path: '/openai/v1/chat/completions',
+      method: 'POST',
       headers: {
-        'Content-Type':  'application/json',
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${groqApiKey}`,
         'Content-Length': Buffer.byteLength(body)
       }
@@ -528,6 +528,16 @@ ipcMain.handle('electrician:deletePayment', async (event, paymentId) => {
 // Paste after the existing finance handlers, before app.on('window-all-closed')
 // ============================================================
 
+// -- General Settings ----------------------------------------
+ipcMain.handle('labour:getSettings', async (event, projectId) => {
+  try { return { success: true, data: await dbOperations.getLabourSettings(projectId) }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:updateSettings', async (event, projectId, data) => {
+  try { return { success: true, data: await dbOperations.updateLabourSettings(projectId, data) }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+
 // -- Masonry -------------------------------------------------
 ipcMain.handle('labour:masonry:getTeams', async (event, projectId) => {
   try { return { success: true, data: await dbOperations.getMasonryTeams(projectId) }; }
@@ -539,6 +549,10 @@ ipcMain.handle('labour:masonry:createTeam', async (event, data) => {
 });
 ipcMain.handle('labour:masonry:deleteTeam', async (event, teamId) => {
   try { await dbOperations.deleteMasonryTeam(teamId); return { success: true }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:masonry:updateTeam', async (event, teamId, updates) => {
+  try { return { success: true, data: await dbOperations.updateMasonryTeam(teamId, updates) }; }
   catch (e) { return { success: false, message: e.message }; }
 });
 ipcMain.handle('labour:masonry:addEntry', async (event, data) => {
@@ -571,6 +585,10 @@ ipcMain.handle('labour:centring:deleteTeam', async (event, id) => {
   try { await dbOperations.deleteCentringTeam(id); return { success: true }; }
   catch (e) { return { success: false, message: e.message }; }
 });
+ipcMain.handle('labour:centring:updateTeam', async (event, id, updates) => {
+  try { return { success: true, data: await dbOperations.updateCentringTeam(id, updates) }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
 ipcMain.handle('labour:centring:addEntry', async (event, data) => {
   try { return { success: true, data: await dbOperations.addCentringEntry(data) }; }
   catch (e) { return { success: false, message: e.message }; }
@@ -593,12 +611,32 @@ ipcMain.handle('labour:concrete:getAll', async (event, projectId) => {
   try { return { success: true, data: await dbOperations.getAllConcreteEntries(projectId) }; }
   catch (e) { return { success: false, message: e.message }; }
 });
-ipcMain.handle('labour:concrete:add', async (event, data) => {
+ipcMain.handle('labour:concrete:addEntry', async (event, data) => {
   try { return { success: true, data: await dbOperations.addConcreteEntry(data) }; }
   catch (e) { return { success: false, message: e.message }; }
 });
-ipcMain.handle('labour:concrete:delete', async (event, id) => {
+ipcMain.handle('labour:concrete:deleteEntry', async (event, id) => {
   try { await dbOperations.deleteConcreteEntry(id); return { success: true }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:concrete:getTeams', async (event, projectId) => {
+  try { return { success: true, data: await dbOperations.getConcreteTeams(projectId) }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:concrete:createTeam', async (event, data) => {
+  try { return { success: true, data: await dbOperations.createConcreteTeam(data) }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:concrete:updateTeam', async (event, id, updates) => {
+  try { return { success: true, data: await dbOperations.updateConcreteTeam(id, updates) }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:concrete:deleteTeam', async (event, id) => {
+  try { await dbOperations.deleteConcreteTeam(id); return { success: true }; }
+  catch (e) { return { success: false, message: e.message }; }
+});
+ipcMain.handle('labour:concrete:getEntries', async (event, teamId) => {
+  try { return { success: true, data: await dbOperations.getConcreteEntries(teamId) }; }
   catch (e) { return { success: false, message: e.message }; }
 });
 
