@@ -66,10 +66,7 @@ function loadLoginView() {
                         <i class="ph ph-users-three"></i>
                         <span><strong>Complete</strong> labour &amp; attendance management</span>
                     </div>
-                    <div class="login-stat-pill">
-                        <i class="ph ph-shield-check"></i>
-                        <span><strong>Secure</strong> role-based access control</span>
-                    </div>
+                    
                 </div>
             </div>
 

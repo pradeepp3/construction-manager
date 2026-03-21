@@ -9,7 +9,7 @@
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "pack": "electron-packager . construction-manager --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icons/icon.ico"
   },
   "keywords": [
     "construction",
@@ -21,12 +21,13 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "mongodb": "^6.3.0"
   },
   "devDependencies": {
-    "electron": "^28.1.0",
-    "electron-builder": "^24.9.1"
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "electron-packager": "^17.1.2"
   },
   "build": {
     "appId": "com.construction.manager",
@@ -36,15 +37,17 @@
     },
     "files": [
       "**/*",
+      "!**/node_modules/*",
       "!**/*.md",
       "!dist/**/*"
     ],
     "win": {
       "target": "nsis",
-      "signAndEditExecutable": false
+      "icon": "assets/icons/icon.ico"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "assets/icons/icon.icns"
     },
     "linux": {
       "target": "AppImage",

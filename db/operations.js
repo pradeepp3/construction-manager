@@ -1,6 +1,6 @@
 const { getDatabase } = require('./connection');
 const { ObjectId } = require('mongodb');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 function toNumber(value, fallback = 0) {
     const num = typeof value === 'number' ? value : parseFloat(value);
